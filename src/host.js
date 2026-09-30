@@ -1,0 +1,205 @@
+'use strict';
+const fs = require('node:fs');
+const path = require('node:path');
+const { performance } = require('node:perf_hooks');
+const { createCanvas, textFont, decodeImage, to565, from565, execGraphics } = require('./graphics');
+const { MemoryFS } = require('./memory-fs');
+const { validRelative } = require('./package');
+const E = { INVALID: -1, MEMORY: -2, UNSUPPORTED: -3, PERMISSION: -4, BUSY: -5, MISSING: -6, IO: -7, EXISTS: -9, HANDLE: -10, SPACE: -11, STATE: -12, AGAIN: -15, DEVICE: -16 };
+function errno(e) { return ({ ENOENT: -6, EEXIST: -9, EACCES: -4, EPERM: -4, ENOSPC: -11, EBADF: -10, ENOTDIR: -1, EISDIR: -1 })[e.code] || -7; }
+class Host {
+  constructor(pkg, options = {}) {
+    this.pkg = pkg; this.options = options; this.manifest = pkg.manifest;
+    this.width = options.width || 240; this.height = options.height || 320;
+    if (this.manifest.orientation === 'landscape' && this.width < this.height || this.manifest.orientation === 'portrait' && this.width > this.height) [this.width, this.height] = [this.height, this.width];
+    this.handles = new Map(); this.nextHandle = 1; this.freeBlocks = []; this.allocations = new Map();
+    this.permissions = new Set(this.manifest.permissions || []);
+    this.fps = 30; this.frame = 0; this.boot = performance.now(); this.exitCode = null; this.paused = false; this.stopped = false;
+    this.keys = new Set(); this.touch = null; this.logs = [];
+    this.accel = options.accel || [0, 0, 9.80665]; this.gyro = options.gyro || [0, 0, 0];
+    this.features = new Set([0, 1, 2, 3, 9, 10, 11, 12, 14]);
+    if (options.wifi) this.features.add(7);
+    if (options.camera) { this.camera = decodeImage(fs.readFileSync(options.camera), 320, 240).canvas; this.features.add(4); }
+    if (options.pcmInput) { this.pcmInput = fs.readFileSync(options.pcmInput); this.features.add(5); }
+    if (!options.noAudio) this.features.add(6);
+    this.volume = 70; this.audio = { state: 0, total: 0, bytes: 0, position: 0, started: performance.now() };
+    this.wifi = { ssid: '', state: 0, last: 0, saved: '' };
+    this.storageFs = options.state ? fs : (options.memoryStorage || new MemoryFS());
+    this.root = path.resolve(options.state || path.join(__dirname, '../memory-session'), this.manifest.id);
+    for (const x of ['data', 'cache', 'kv']) this.storageFs.mkdirSync(path.join(this.root, x), { recursive: true });
+    this.shared = path.resolve(options.state || path.join(__dirname, '../memory-session'), 'shared');
+    for (const x of ['sd', 'music']) this.storageFs.mkdirSync(path.join(this.shared, x), { recursive: true });
+    this.screen = createCanvas(this.width, this.height); this.presentCount = 0;
+    this.send = options.send || (() => {});
+    const names = { display: 0, touch: 1, mouse: 2, keyboard: 3, camera: 4, 'audio-in': 5, 'audio-out': 6, wifi: 7, bluetooth: 8, accelerometer: 9, gyroscope: 10, filesystem: 11, rtc: 12, psram: 13, framebuffer: 14 };
+    for (const feature of this.manifest.requires || []) if (feature !== 'storage.app' && !this.features.has(names[feature])) throw Error(`Required capability unavailable: ${feature}`);
+  }
+  now() { return Math.floor(performance.now() - this.boot); }
+  buffer() { return Buffer.from(this.memory.buffer); }
+  range(p, n) { return Number.isInteger(p) && Number.isInteger(n) && (p >>> 0) + (n >>> 0) <= this.memory.buffer.byteLength && n >= 0; }
+  bytes(p, n) { if (!this.range(p, n)) throw Object.assign(Error('WASM memory bounds'), { code: 'EINVAL' }); return this.buffer().subarray(p >>> 0, (p >>> 0) + n); }
+  u32(p, v) { if (v === undefined) return this.bytes(p, 4).readUInt32LE(); this.bytes(p, 4).writeUInt32LE(v >>> 0); }
+  string(p, n) { return this.bytes(p, n).toString('utf8'); }
+  cstring(p) { const b = this.buffer(); p >>>= 0; if (p >= b.length) throw Error('Invalid string'); const end = b.indexOf(0, p); if (end < 0) throw Error('Unterminated string'); return b.toString('utf8', p, end); }
+  output(p, text, cap, nul = false) { const b = Buffer.from(text); if (b.length + (nul ? 1 : 0) > cap) return -11; this.bytes(p, cap); b.copy(this.buffer(), p); if (nul) this.buffer()[p + b.length] = 0; return b.length; }
+  struct(p, cap, size, version = 1) { if (cap < size || !this.range(p, size) || this.u32(p) < size || this.u32(p + 4) !== version) return false; this.bytes(p, size).fill(0); this.u32(p, size); this.u32(p + 4, version); return true; }
+  add(kind, value, type = 0) { const h = (type | this.nextHandle++) >>> 0; this.handles.set(h, { kind, ...value }); return h; }
+  get(h, kind) { const v = this.handles.get(h >>> 0); if (!v || v.kind !== kind) throw Object.assign(Error('Bad handle'), { code: 'EBADF' }); return v; }
+  alloc(n) {
+    if (n < 0 || n > 2 * 1024 * 1024) return 0;
+    n = Math.ceil(Math.max(n, 1) / 16) * 16;
+    const i = this.freeBlocks.findIndex(x => x.n >= n);
+    if (i >= 0) { const block = this.freeBlocks.splice(i, 1)[0]; if (block.n > n) this.freeBlocks.push({ p: block.p + n, n: block.n - n }); this.allocations.set(block.p, n); return block.p; }
+    const p = this.heap, end = p + n;
+    if (end > Math.min(this.manifest.memory?.max || 2097152, 2097152)) return 0;
+    if (end > this.memory.buffer.byteLength) { try { this.memory.grow(Math.ceil((end - this.memory.buffer.byteLength) / 65536)); } catch { return 0; } }
+    this.heap = end; this.allocations.set(p, n); return p;
+  }
+  free(p) { const n = this.allocations.get(p); if (n) { this.allocations.delete(p); this.freeBlocks.push({ p, n }); this.freeBlocks.sort((a, b) => a.p - b.p); for (let i = 0; i < this.freeBlocks.length - 1;) { const a = this.freeBlocks[i], b = this.freeBlocks[i + 1]; if (a.p + a.n === b.p) { a.n += b.n; this.freeBlocks.splice(i + 1, 1); } else i++; } } }
+  permission(p) { if (!this.permissions.has(p)) throw Object.assign(Error('Permission denied'), { code: 'EPERM' }); }
+  virtual(p, n, write = false) {
+    this.permission('fs'); const v = this.string(p, n);
+    const match = /^\/(assets|data|cache|music|sd)(?:\/(.*))?$/.exec(v);
+    if (!match || (match[2] && !validRelative(match[2]))) throw Object.assign(Error('Invalid sandbox path'), { code: 'EPERM' });
+    const [, area, rel = ''] = match;
+    if (area === 'sd') this.permission('sd');
+    if (area === 'assets') { if (write) throw Object.assign(Error('Read only assets'), { code: 'EPERM' }); return { area, rel }; }
+    if (area === 'music' && write) throw Object.assign(Error('Read only music'), { code: 'EPERM' });
+    const base = path.join(['music', 'sd'].includes(area) ? this.shared : this.root, area), target = path.resolve(base, rel);
+    let parent = target;
+    while (!this.storageFs.existsSync(parent)) parent = path.dirname(parent);
+    const realBase = this.storageFs.realpathSync(base), realParent = this.storageFs.realpathSync(parent);
+    if (realParent !== realBase && !realParent.startsWith(realBase + path.sep)) throw Object.assign(Error('Sandbox symlink escape'), { code: 'EPERM' });
+    return { area, rel, path: target };
+  }
+  readVirtual(p, n) { const v = this.virtual(p, n); if (v.area === 'assets') { const b = this.pkg.assets.get(v.rel); if (!b) throw Object.assign(Error('Missing asset'), { code: 'ENOENT' }); return b; } return this.storageFs.readFileSync(v.path); }
+  syncIn(s) { if (s.ptr) from565(s.canvas, this.bytes(s.ptr, s.w * s.h * 2)); }
+  syncOut(s) { if (s.ptr) to565(s.canvas).copy(this.buffer(), s.ptr); }
+  present(s) { this.syncIn(s); const c = this.screen.getContext('2d'); c.clearRect(0, 0, this.width, this.height); c.drawImage(s.canvas, 0, 0); this.presentCount++; this.send({ type: 'frame', data: this.screen.toBuffer('image/png') }); return 0; }
+  log(level, message) { const item = { level, message, ms: this.now() }; this.logs.push(item); if (this.logs.length > 200) this.logs.shift(); this.options.log?.(item); this.send({ type: 'log', ...item }); }
+  imports() {
+    const a = {
+      aster_system_get_abi_version: () => 0x30600,
+      aster_system_has_feature: bit => this.features.has(bit) ? 1 : 0,
+      aster_app_exit: code => { this.exitCode = code; },
+      aster_app_set_framerate: fps => { this.fps = Math.min(fps >>> 0 || 30, 60); return 0; },
+      aster_time_now_ms: () => this.now() >>> 0,
+      aster_log: (level, p, n) => this.log(level, this.string(p, n)),
+      aster_display_count: () => 1,
+      aster_display_get_info: (i, p, n) => {
+        if (i) return -6; if (!this.struct(p, n, 56)) return -1;
+        [this.width, this.height, 9600, 0x1002].forEach((v, j) => this.u32(p + 8 + j * 4, v));
+        this.bytes(p + 24, 8).writeBigUInt64LE(1n << 2n);
+        this.u32(p + 32, 60); this.u32(p + 36, this.width > this.height ? 1 : 0); this.u32(p + 44, this.width); this.u32(p + 48, this.height); return 0;
+      },
+      aster_input_get_info: (p, n) => { if (!this.struct(p, n, 20)) return -1; this.u32(p + 8, 3); this.u32(p + 12, 1); return 0; },
+      aster_input_touch: (p, n) => { if (!n || !this.touch) return 0; this.bytes(p, 12); [this.touch.x, this.touch.y, this.touch.action].forEach((v, i) => this.u32(p + i * 4, v)); return 1; },
+      aster_input_keys_state: (p, n) => { const keys = [...this.keys].slice(0, n >>> 0); this.bytes(p, keys.length * 4); keys.forEach((v, i) => this.u32(p + i * 4, v)); return keys.length; },
+      aster_timer_create: (period, repeat, user, out) => { if (period <= 0) return -1; this.bytes(out, 4); this.u32(out, this.add('timer', { period, repeat, user, due: this.now() + period }, 0x06000000)); return 0; },
+      aster_timer_destroy: h => { this.get(h, 'timer'); this.handles.delete(h); return 0; },
+      aster_surface_create: (p, n, out) => {
+        if (n < 24 || this.u32(p) < 24 || this.u32(p + 4) !== 1) return -1;
+        const flags = this.u32(p + 20), w = this.u32(p + 8) || ((flags & 1) ? this.width : 0), h = this.u32(p + 12) || ((flags & 1) ? this.height : 0), fmt = this.u32(p + 16);
+        if (fmt !== 0x1002 && fmt !== 0xffff) return -3; if (!w || !h || w > 4096 || h > 4096 || flags & ~1) return -1;
+        this.bytes(out, 4);
+        const used = [...this.handles.values()].filter(v => v.kind === 'surface').reduce((n, s) => n + s.w * s.h * 2, 0);
+        if (used + w * h * 2 > (this.manifest.memory?.heap || 262144)) return -2;
+        this.u32(out, this.add('surface', { w, h, flags, ptr: 0, canvas: createCanvas(w, h) }, 0x02000000)); return 0;
+      },
+      aster_surface_destroy: h => { const s = this.get(h, 'surface'); if (s.ptr) this.free(s.ptr); this.handles.delete(h); return 0; },
+      aster_surface_acquire: (h, p, n) => {
+        const s = this.get(h, 'surface'); if (!this.struct(p, n, 32)) return -1;
+        if (!(s.flags & 1) && !s.ptr) { s.ptr = this.alloc(s.w * s.h * 2); if (!s.ptr) return -2; this.syncOut(s); }
+        [s.ptr, s.w, s.h, s.w * 2, 0x1002, s.flags].forEach((v, i) => this.u32(p + 8 + i * 4, v)); return 0;
+      },
+      aster_surface_present: h => this.present(this.get(h, 'surface')),
+      aster_surface_flush: (h, p, x, y, w, hh, pitch) => {
+        const s = this.get(h, 'surface'); if (!w || !hh || x < 0 || y < 0 || x + w > s.w || y + hh > s.h || pitch < w) return -1;
+        this.bytes(p, ((hh - 1) * pitch + w) * 2); this.syncIn(s);
+        const temp = createCanvas(w, hh), b = Buffer.alloc(w * hh * 2);
+        for (let i = 0; i < hh; i++) this.bytes(p + i * pitch * 2, w * 2).copy(b, i * w * 2);
+        from565(temp, b); s.canvas.getContext('2d').drawImage(temp, x, y); this.syncOut(s); return this.present(s);
+      },
+      aster_gfx_exec: (h, ...args) => execGraphics(this, this.get(h, 'surface'), ...args),
+      aster_gfx_fonts_pending: () => 0,
+      aster_gfx_text_w: (px, p, n) => { const c = this.screen.getContext('2d'); textFont(c, px); return Math.ceil(c.measureText(this.string(p, n)).width); },
+      aster_gfx_bmp_load: (p, n, w, h, out, ow, oh) => {
+        this.bytes(out, 4); this.bytes(ow, 4); this.bytes(oh, 4);
+        const img = decodeImage(this.readVirtual(p, n), w, h), c = img.canvas.getContext('2d'), pixels = c.getImageData(0, 0, img.canvas.width, img.canvas.height);
+        for (let i = 0; i < pixels.data.length; i += 4) { if ((pixels.data[i] >> 3) === 0 && (pixels.data[i + 1] >> 2) === 0 && (pixels.data[i + 2] >> 3) === 0) pixels.data[i + 3] = 0; else pixels.data[i + 3] = 255; }
+        c.putImageData(pixels, 0, 0); this.u32(out, this.add('bitmap', { canvas: img.canvas })); this.u32(ow, img.canvas.width); this.u32(oh, img.canvas.height); return 0;
+      },
+      aster_gfx_bmp_free: h => { this.get(h, 'bitmap'); this.handles.delete(h); return 0; },
+      aster_img_probe: (p, n, out, size) => {
+        if (!this.struct(out, size, 88)) return -1;
+        const bytes = this.readVirtual(p, n), im = decodeImage(bytes, 0, 0), fmt = bytes[0] === 0x89 ? 3 : bytes[0] === 0xff ? 2 : 1;
+        [fmt, im.width, im.height, bytes.length, im.width, im.height].forEach((v, i) => this.u32(out + 8 + i * 4, v)); return 0;
+      },
+      aster_img_render: (p, n, out, size) => {
+        if (size < 40 || this.u32(out) < 40 || this.u32(out + 4) !== 1) return -1;
+        const im = decodeImage(this.readVirtual(p, n), this.u32(out + 16), this.u32(out + 20)), b = to565(im.canvas);
+        if (b.length > this.u32(out + 12)) return -11; this.bytes(this.u32(out + 8), b.length).set(b); this.u32(out + 24, im.canvas.width); this.u32(out + 28, im.canvas.height); return 0;
+      },
+      aster_accel_read: (p, n) => this.sensor(p, n, this.accel),
+      aster_gyro_read: (p, n) => this.sensor(p, n, this.gyro),
+      aster_cam_info: (w, h) => { if (!this.camera) return -16; this.bytes(w, 4); this.bytes(h, 4); this.u32(w, this.camera.width); this.u32(h, this.camera.height); return 0; },
+      aster_cam_read: (p, n) => { if (!this.camera) return -16; const b = to565(this.camera); if (n < b.length) return -11; this.bytes(p, b.length).set(b); return 0; },
+      aster_time_get: (p, n) => {
+        if (!this.struct(p, n, 56)) return -1;
+        const d = new Date(); this.bytes(p + 8, 8).writeBigUInt64LE(BigInt(d.getTime())); this.u32(p + 16, 1);
+        [d.getFullYear(), d.getMonth() + 1, d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds(), d.getDay()].forEach((v, i) => this.u32(p + 20 + i * 4, v)); return 0;
+      },
+    };
+    Object.assign(a, this.storageImports(), this.audioImports(), this.wifiImports(), this.libcImports());
+    a.aster_appmgr_count = () => { this.permission('appmgr'); return (this.options.catalog || [this.pkg]).length; };
+    a.aster_appmgr_list = (i, p, n) => {
+      this.permission('appmgr'); const app = (this.options.catalog || [this.pkg])[i]; if (!app) return -6;
+      if (!this.struct(p, n, 168, 2)) return -1;
+      this.output(p + 8, app.manifest.id, 64, true); this.output(p + 72, app.manifest.name || app.manifest.id, 40, true); this.output(p + 112, app.manifest.version || '0.0.0', 24, true);
+      this.u32(p + 136, app.manifest.id === this.manifest.id ? (this.paused ? 2 : 1) : 0); this.u32(p + 140, app.hasAot ? 1 : 0); this.output(p + 148, app.manifest.category || '', 16, true); return 0;
+    };
+    a.aster_appmgr_start = (p, n) => { this.permission('appmgr'); const id = this.string(p, n); if (id === this.manifest.id) return -5; if (!(this.options.catalog || []).some(a => a.manifest.id === id)) return -6; this.switchTo = id; this.exitCode = 0; return 0; };
+    a.aster_appmgr_uninstall = (p, n) => { this.permission('appmgr'); const id = this.string(p, n); if (id === this.manifest.id) return -5; const list = this.options.catalog || [], i = list.findIndex(a => a.manifest.id === id); if (i < 0) return -6; list.splice(i, 1); return 0; };
+    this.apiNames = Object.keys(a).filter(x => x.startsWith('aster_'));
+    const wrapped = {};
+    for (const [name, fn] of Object.entries(a)) wrapped[name] = (...args) => { try { return fn(...args); } catch (e) { if (e instanceof WebAssembly.RuntimeError) throw e; if (e.code === 'EINVAL' || e instanceof RangeError) return -1; this.log(2, `${name}: ${e.message}`); return errno(e); } };
+    return wrapped;
+  }
+  sensor(p, n, values) { if (n < 12) return -1; values.forEach((v, i) => this.bytes(p + i * 4, 4).writeFloatLE(v)); return 0; }
+  start() {
+    const module = new WebAssembly.Module(this.pkg.wasm), imports = this.imports();
+    for (const i of WebAssembly.Module.imports(module)) if (i.module !== 'env' || i.kind !== 'function' || !imports[i.name]) throw Error(`Unsupported import ${i.module}.${i.name}`);
+    this.instance = new WebAssembly.Instance(module, { env: imports }); this.memory = this.instance.exports.memory;
+    for (const name of ['aster_app_init', 'aster_app_event']) if (typeof this.instance.exports[name] !== 'function') throw Error(`Missing lifecycle export: ${name}`);
+    if (!(this.memory instanceof WebAssembly.Memory) || !this.instance.exports.__heap_base) throw Error('APP must export memory and __heap_base (use SDK build)');
+    if (this.memory.buffer.byteLength > 2097152) throw Error('APP initial memory exceeds device 2 MiB limit');
+    this.heap = Math.ceil(Number(this.instance.exports.__heap_base.value) / 16) * 16;
+    this.eventPtr = this.alloc(56); if (!this.eventPtr) throw Error('No event buffer memory');
+    const rc = this.call('aster_app_init'); if (rc < 0) { this.stop(); throw Error(`aster_app_init failed: ${rc}`); }
+    if (this.exitCode === null) this.call('aster_app_start'); return this;
+  }
+  call(name, ...args) { return this.instance?.exports[name]?.(...args); }
+  event(type, payload = []) {
+    if (this.exitCode !== null || this.paused) return;
+    const p = this.eventPtr; this.bytes(p, 56).fill(0); this.u32(p, 56); this.u32(p + 4, 1); this.u32(p + 8, type); this.bytes(p + 16, 8).writeBigUInt64LE(BigInt(this.now())); payload.forEach((v, i) => this.u32(p + 24 + i * 4, v)); this.call('aster_app_event', p);
+  }
+  tick() {
+    if (this.paused || this.exitCode !== null) return;
+    for (const [id, t] of [...this.handles]) if (t.kind === 'timer' && this.now() >= t.due) {
+      if (t.repeat) t.due = this.now() + t.period; else this.handles.delete(id);
+      this.event(3, [id, t.user]); if (this.exitCode !== null) return;
+    }
+    this.event(1, [this.frame++]);
+  }
+  input(msg) {
+    if (msg.type === 'audio-feedback') { this.audioFeedback(msg); return; }
+    if (msg.type === 'touch') { const x = Math.max(0, Math.min(this.width - 1, Math.floor(msg.x))), y = Math.max(0, Math.min(this.height - 1, Math.floor(msg.y))); if (![1, 2, 3].includes(msg.action)) return; this.touch = msg.action === 3 ? null : { x, y, action: msg.action }; this.event(2, [x, y, msg.action, 0]); }
+    if (msg.type === 'key' && Number.isInteger(msg.code) && msg.code > 0 && msg.code < 768) { if (msg.pressed) this.keys.add(msg.code); else this.keys.delete(msg.code); this.event(4, [msg.code, msg.pressed ? 1 : 0]); }
+    if (msg.type === 'sensor') { for (const name of ['accel', 'gyro']) if (Array.isArray(msg[name]) && msg[name].length === 3 && msg[name].every(Number.isFinite)) this[name] = msg[name]; }
+    if (msg.type === 'pause') { this.setPaused(!this.paused); }
+  }
+  setPaused(pause) { if (this.exitCode !== null || pause === this.paused) return; if (pause) { this.call('aster_app_pause'); this.paused = true; this.pauseAt = this.now(); } else { const elapsed = this.now() - this.pauseAt; for (const t of this.handles.values()) if (t.kind === 'timer') t.due += elapsed; this.paused = false; this.call('aster_app_resume'); } this.keys.clear(); this.touch = null; }
+  stop() { if (this.stopped) return; this.stopped = true; try { this.call('aster_app_stop'); } finally { try { this.call('aster_app_destroy'); } finally { for (const h of this.handles.values()) if (h.kind === 'file' && h.fd !== undefined) this.storageFs.closeSync(h.fd); this.handles.clear(); this.send({ type: 'audio', op: 'stop' }); } } }
+}
+Object.assign(Host.prototype, require('./storage'), require('./libc'), require('./peripherals'));
+module.exports = { Host, E, errno };
