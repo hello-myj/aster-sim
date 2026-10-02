@@ -35,9 +35,9 @@ test('ASTP truncation, malicious paths and ABI mismatch fail before instantiatio
   const bad = Buffer.from(original); const mo = bad.readUInt32LE(12), ml = bad.readUInt32LE(16); const text = bad.toString('utf8', mo, mo + ml).replace('"3.6"', '"4.6"'); bad.write(text, mo);
   fs.writeFileSync(corrupt, bad); assert.throws(() => loadPackage(corrupt), /ABI/);
 });
-test('all public ABI 3.6 aster imports have an explicit handler', t => {
-  const { api } = setup(t), names = require('./abi-3.6-imports.json');
-  assert.equal(names.length, 70);
+test('all public ABI 3.7 aster imports have an explicit handler', t => {
+  const { api } = setup(t), names = require('./abi-3.7-imports.json');
+  assert.equal(names.length, 72);
   for (const name of names) assert.equal(typeof api[name], 'function', name);
 });
 test('memory bounds and struct version checks reject corrupt APP pointers', t => {

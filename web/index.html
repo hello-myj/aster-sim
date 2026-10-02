@@ -4,13 +4,13 @@
 *{box-sizing:border-box}body{margin:0;background:#101721;color:#dce6f1;font:14px 'Segoe UI','Microsoft YaHei',sans-serif}header{padding:16px 22px;border-bottom:1px solid #293648;display:flex;gap:18px;align-items:center}header b{color:#69d3b0;font-size:21px}main{display:flex;gap:24px;padding:24px;align-items:flex-start}.screen{background:#070a0f;padding:12px;border-radius:16px;border:1px solid #344155;box-shadow:0 10px 40px #0006}canvas{display:block;touch-action:none;image-rendering:pixelated;outline:none}aside{width:280px;flex-shrink:0}h3{font-size:14px;color:#8bb4d4;margin:18px 0 8px}button{background:#29394e;color:#eff5fa;border:1px solid #49617a;border-radius:6px;padding:8px;cursor:pointer;margin:0 4px 6px 0}button:hover{background:#3c5270}p{color:#a8b9cc;line-height:1.65}small{color:#8fabc1}pre{background:#09111c;padding:12px;border-radius:6px;height:230px;overflow:auto;white-space:pre-wrap;font-size:12px}label{display:block;margin:8px 0}input{width:70px;background:#182437;color:white;border:1px solid #526880;padding:5px}.status{color:#7adcba}#error{color:#ff9d97}a{color:#8ce0c3}
 </style>
 <style>@media(max-width:850px){main{flex-direction:column;padding:16px}.screen{max-width:100%}canvas{max-width:100%;height:auto!important}aside{width:100%}header{flex-wrap:wrap}}</style>
-<header><b>aster-sim</b><span id="name">正在加载 APP…</span><small>ABI 3.6 · WASM</small></header>
+<header><b>aster-sim</b><span id="name">正在加载 APP…</span><small>ABI 3.7 · WASM</small></header>
 <main><div class="screen"><canvas id="screen" width="240" height="320" tabindex="0" aria-label="APP 屏幕"></canvas></div><aside>
 <div id="status" class="status">连接运行时…</div><p id="error"></p>
 <h3>运行控制</h3><button id="pause">暂停 / 恢复</button><button id="reset">重新加载</button><button id="stop">结束</button><button id="shot">保存截图</button><button id="sound">启用声音</button><p id="audio-status">点击“启用声音”后播放音频</p>
 <h3>输入</h3><p>点击或拖动屏幕模拟单点触摸。点击屏幕后可使用键盘，按键按 evdev 编号送入 APP。窗口失焦时释放按键。</p>
-<h3>模拟传感器</h3><label>加速度 X / Y / Z <input id="ax" type="number" step="0.1" value="0"><input id="ay" type="number" step="0.1" value="0"><input id="az" type="number" step="0.1" value="9.80665"></label>
-<label>角速度 X / Y / Z <input id="gx" type="number" step="0.1" value="0"><input id="gy" type="number" step="0.1" value="0"><input id="gz" type="number" step="0.1" value="0"></label><button id="sensor">应用传感器值</button>
+<h3>模拟六轴 IMU</h3><p>六轴同时采样，缓存10毫秒。坐标固定于传感器，不随屏幕旋转。</p><label>加速度 X / Y / Z（m/s²） <input id="ax" type="number" step="0.1" value="0"><input id="ay" type="number" step="0.1" value="0"><input id="az" type="number" step="0.1" value="9.80665"></label>
+<label>角速度 X / Y / Z（rad/s） <input id="gx" type="number" step="0.1" value="0"><input id="gy" type="number" step="0.1" value="0"><input id="gz" type="number" step="0.1" value="0"></label><button id="sensor">应用传感器值</button>
 <p id="devices"></p><small>字体、外设时序和性能需在设备上最终验证。</small><h3>APP 日志</h3><pre id="logs"></pre>
 </aside></main>
 <script src="/audio.js"></script>

@@ -2,7 +2,7 @@
   "name": "aster-sim",
   "version": "0.1.0",
   "private": true,
-  "description": "Windows WASM APP simulator for Aster ABI 3.6",
+  "description": "Windows WASM APP simulator for Aster ABI 3.7",
   "scripts": {
     "start": "node src/cli.js",
     "test": "node --test test/*.test.js",

@@ -1,7 +1,7 @@
 # aster-sim
 
 Windows 上专门运行 Aster APP 的模拟器，名称 **aster-sim**（Aster Simulator）。
-ABI 3.6；默认且目前仅执行 WASM。`.ast` 中的 Xtensa AOT 可以保留，但始终忽略；纯 `.aot` 不接受。
+ABI 3.7；默认且目前仅执行 WASM。`.ast` 中的 Xtensa AOT 可以保留，但始终忽略；纯 `.aot` 不接受。
 APP 可直接使用 SDK 编译产物，不需要移植成桌面应用。独立文件夹实现，没有修改 SDK 固定契约。
 工程独立放置于 SDK 外，默认与 `aster-sdk` 同级。运行模拟器及自动测试无需 SDK；只有编译 APP / AOT 和设备部署需要 SDK 工具。
 
@@ -49,13 +49,13 @@ npm run portable
 
 ## 接口支持与差异
 
-当前手册公开的 **70 个 `aster_*` 导入均已注册**；这是名称覆盖，不代表硬件完全等价。未知导入在加载时报错，不伪造成功。
+当前手册公开的 **72 个 `aster_*` 导入均已注册**；这是名称覆盖，不代表硬件完全等价。未知导入在加载时报错，不伪造成功。
 
 - 生命周期、FRAME/TOUCH/KEY/TIMER 事件、FPS、单点触摸轮询、键盘状态、定时器与退出：实现。
 - display、RGB565 surface、panel canvas、acquire/present/flush、所有公开 gfx 命令、图片 probe/render、BMP/PNG/JPEG 精灵：实现。同步解码，源图限制 4096×4096 / 16 MiB。
 - 中文文字使用 Windows 字体，字号吸附 16/20，基线遵循 ABI；字宽、抗锯齿与设备烘焙字形可能不同。字体同步可用，fonts_pending 返回 0。
 - 文件/目录及 KV：实现，按 APP ID 隔离并检查权限、路径和 symlink；`/assets` 内存只读，`/data`、`/cache` 可写，`/music` 只读，`/sd` 另需 sd 权限。
-- RTC：主机本地时钟；加速度/陀螺仪：可在界面设置的虚拟值，单位 m/s² 与 rad/s。
+- RTC：主机本地时钟；加速度/陀螺仪：可在界面设置的虚拟值，单位 m/s² 与 rad/s。ABI 3.7 的 `aster_imu_get_info` / `aster_imu_read` 提供同步六轴快照、单调时间戳和 u32 序号；10 ms 内重复读取复用同一快照，序号可回绕。旧 accel/gyro 接口继续可用。
 - 相机：`--camera` 静态图片转 RGB565，保持比例缩小到 320×240；未指定时返回 ENODEV。
 - 录音：`--pcm-input` 固定 44100 Hz 双声道 S16LE 文件输入，未指定时 ENODEV；不是物理麦克风采集。
 - 音频输出：浏览器解码 WAV/MP3，支持背景播放、暂停、恢复、seek、音量、最多四个音效并混音。界面需点击“启用声音”解除浏览器播放限制。音效支持 8–192 kHz 双声道 S16LE WAV，由浏览器重采样至输出设备，缓存后即时混音；同一音效重放会重新开始。浏览器反馈 MP3 解码时长和自然播放结束状态，APP 可据此循环播放；录音与播放时序不模拟设备阻塞；lyrics 当前返回空。
@@ -79,6 +79,9 @@ npm test
 npm run portable
 # 可选：直接引用外部SDK包进行2048集成测试，不复制包
 $env:ASTER_SIM_2048_AST = 'E:\path\to\aster.game.2048.ast'
+npm test
+# 可选：ABI 3.7 IMU立方体集成测试，包仍放在SDK中
+$env:ASTER_SIM_IMUCUBE_AST = 'E:\path\to\aster.imucube.ast'
 npm test
 ```
 ## 模拟通过 → AOT → 设备

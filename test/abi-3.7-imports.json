@@ -43,6 +43,8 @@
   "aster_gyro_read",
   "aster_img_probe",
   "aster_img_render",
+  "aster_imu_get_info",
+  "aster_imu_read",
   "aster_input_get_info",
   "aster_input_keys_state",
   "aster_input_touch",

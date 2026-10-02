@@ -17,6 +17,7 @@ class Host {
     this.fps = 30; this.frame = 0; this.boot = performance.now(); this.exitCode = null; this.paused = false; this.stopped = false;
     this.keys = new Set(); this.touch = null; this.logs = [];
     this.accel = options.accel || [0, 0, 9.80665]; this.gyro = options.gyro || [0, 0, 0];
+    this.imuSample = null; this.imuSequence = 0;
     this.features = new Set([0, 1, 2, 3, 9, 10, 11, 12, 14]);
     if (options.wifi) this.features.add(7);
     if (options.camera) { this.camera = decodeImage(fs.readFileSync(options.camera), 320, 240).canvas; this.features.add(4); }
@@ -79,7 +80,7 @@ class Host {
   log(level, message) { const item = { level, message, ms: this.now() }; this.logs.push(item); if (this.logs.length > 200) this.logs.shift(); this.options.log?.(item); this.send({ type: 'log', ...item }); }
   imports() {
     const a = {
-      aster_system_get_abi_version: () => 0x30600,
+      aster_system_get_abi_version: () => 0x30700,
       aster_system_has_feature: bit => this.features.has(bit) ? 1 : 0,
       aster_app_exit: code => { this.exitCode = code; },
       aster_app_set_framerate: fps => { this.fps = Math.min(fps >>> 0 || 30, 60); return 0; },
@@ -140,6 +141,8 @@ class Host {
         const im = decodeImage(this.readVirtual(p, n), this.u32(out + 16), this.u32(out + 20)), b = to565(im.canvas);
         if (b.length > this.u32(out + 12)) return -11; this.bytes(this.u32(out + 8), b.length).set(b); this.u32(out + 24, im.canvas.width); this.u32(out + 28, im.canvas.height); return 0;
       },
+      aster_imu_get_info: (p, n) => this.imuRead(p, n, true),
+      aster_imu_read: (p, n) => this.imuRead(p, n, false),
       aster_accel_read: (p, n) => this.sensor(p, n, this.accel),
       aster_gyro_read: (p, n) => this.sensor(p, n, this.gyro),
       aster_cam_info: (w, h) => { if (!this.camera) return -16; this.bytes(w, 4); this.bytes(h, 4); this.u32(w, this.camera.width); this.u32(h, this.camera.height); return 0; },
@@ -164,6 +167,31 @@ class Host {
     const wrapped = {};
     for (const [name, fn] of Object.entries(a)) wrapped[name] = (...args) => { try { return fn(...args); } catch (e) { if (e instanceof WebAssembly.RuntimeError) throw e; if (e.code === 'EINVAL' || e instanceof RangeError) return -1; this.log(2, `${name}: ${e.message}`); return errno(e); } };
     return wrapped;
+  }
+  imuRead(p, n, info) {
+    const size = info ? 16 : 48;
+    // Unlike struct(), validate everything before touching the caller's output.
+    if (!p || !Number.isInteger(n) || n < size || !this.range(p, size) ||
+        this.u32(p) < size || this.u32(p + 4) !== 1) return -1;
+    if (!this.features.has(9) || !this.features.has(10)) return -16;
+    let sample;
+    if (!info) {
+      const now = this.now();
+      if (!this.imuSample || now - this.imuSample.timestamp >= 10) {
+        if (![...this.accel, ...this.gyro].every(v => Number.isFinite(v) && Number.isFinite(Math.fround(v)))) return -7;
+        this.imuSequence = (this.imuSequence + 1) >>> 0;
+        this.imuSample = { timestamp: now, sequence: this.imuSequence, accel: [...this.accel], gyro: [...this.gyro] };
+      }
+      sample = this.imuSample;
+    }
+    this.bytes(p, size).fill(0); this.u32(p, size); this.u32(p + 4, 1);
+    if (info) { this.u32(p + 8, 3); this.u32(p + 12, 10); }
+    else {
+      this.bytes(p + 8, 8).writeBigUInt64LE(BigInt(sample.timestamp));
+      this.u32(p + 16, sample.sequence); this.u32(p + 20, 3);
+      [...sample.accel, ...sample.gyro].forEach((v, i) => this.bytes(p + 24 + i * 4, 4).writeFloatLE(v));
+    }
+    return 0;
   }
   sensor(p, n, values) { if (n < 12) return -1; values.forEach((v, i) => this.bytes(p + i * 4, 4).writeFloatLE(v)); return 0; }
   start() {

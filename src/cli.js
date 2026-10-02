@@ -7,7 +7,7 @@ const crypto = require('node:crypto');
 const { Worker } = require('node:worker_threads');
 const { spawn } = require('node:child_process');
 const { WebSocketServer, WebSocket } = require('ws');
-const help = `aster-sim 0.1.0 — Aster ABI 3.6 WASM APP simulator
+const help = `aster-sim 0.1.0 — Aster ABI 3.7 WASM APP simulator
 Usage: aster-sim APP.ast [--resolution 240x320] [options]
   --width N --height N    Alternative screen size; manifest orientation applies
   --scale N              Window display scale (default 2; APP pixels unchanged)
