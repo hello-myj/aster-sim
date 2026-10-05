@@ -1,12 +1,13 @@
 {
   "name": "aster-sim",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Windows WASM APP simulator for Aster ABI 3.7",
   "scripts": {
     "start": "node src/cli.js",
     "test": "node --test test/*.test.js",
-    "portable": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-portable.ps1"
+    "portable": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-portable.ps1",
+    "check-sdk": "node scripts/check-sdk.js"
   },
   "engines": {
     "node": ">=22"

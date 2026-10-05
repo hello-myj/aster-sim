@@ -103,9 +103,12 @@ class Host {
         const flags = this.u32(p + 20), w = this.u32(p + 8) || ((flags & 1) ? this.width : 0), h = this.u32(p + 12) || ((flags & 1) ? this.height : 0), fmt = this.u32(p + 16);
         if (fmt !== 0x1002 && fmt !== 0xffff) return -3; if (!w || !h || w > 4096 || h > 4096 || flags & ~1) return -1;
         this.bytes(out, 4);
-        const used = [...this.handles.values()].filter(v => v.kind === 'surface').reduce((n, s) => n + s.w * s.h * 2, 0);
-        if (used + w * h * 2 > (this.manifest.memory?.heap || 262144)) return -2;
-        this.u32(out, this.add('surface', { w, h, flags, ptr: 0, canvas: createCanvas(w, h) }, 0x02000000)); return 0;
+        // Full-panel canvases live in platform memory, as in firmware.
+        // Partial canvases fall back to an ordinary APP-owned surface.
+        const canvasFlags = (flags & 1) && w === this.width && h === this.height ? 1 : 0;
+        const used = [...this.handles.values()].filter(v => v.kind === 'surface' && !(v.flags & 1)).reduce((n, s) => n + s.w * s.h * 2, 0);
+        if (used + (canvasFlags ? 0 : w * h * 2) > (this.manifest.memory?.heap || 262144)) return -2;
+        this.u32(out, this.add('surface', { w, h, flags: canvasFlags, ptr: 0, canvas: createCanvas(w, h) }, 0x02000000)); return 0;
       },
       aster_surface_destroy: h => { const s = this.get(h, 'surface'); if (s.ptr) this.free(s.ptr); this.handles.delete(h); return 0; },
       aster_surface_acquire: (h, p, n) => {

@@ -1,7 +1,7 @@
 # aster-sim
 
 Windows 上专门运行 Aster APP 的模拟器，名称 **aster-sim**（Aster Simulator）。
-ABI 3.7；默认且目前仅执行 WASM。`.ast` 中的 Xtensa AOT 可以保留，但始终忽略；纯 `.aot` 不接受。
+ABI 3.7.0；默认且目前仅执行 WASM。`.ast` 中的 Xtensa AOT 可以保留，但始终忽略；纯 `.aot` 不接受。
 APP 可直接使用 SDK 编译产物，不需要移植成桌面应用。独立文件夹实现，没有修改 SDK 固定契约。
 工程独立放置于 SDK 外，默认与 `aster-sdk` 同级。运行模拟器及自动测试无需 SDK；只有编译 APP / AOT 和设备部署需要 SDK 工具。
 
@@ -49,7 +49,7 @@ npm run portable
 
 ## 接口支持与差异
 
-当前手册公开的 **72 个 `aster_*` 导入均已注册**；这是名称覆盖，不代表硬件完全等价。未知导入在加载时报错，不伪造成功。
+当前 SDK 公开的 **72 个 `aster_*` 导入均已注册**；这是名称覆盖，不代表硬件完全等价。未知导入在加载时报错，不伪造成功。
 
 - 生命周期、FRAME/TOUCH/KEY/TIMER 事件、FPS、单点触摸轮询、键盘状态、定时器与退出：实现。
 - display、RGB565 surface、panel canvas、acquire/present/flush、所有公开 gfx 命令、图片 probe/render、BMP/PNG/JPEG 精灵：实现。同步解码，源图限制 4096×4096 / 16 MiB。
@@ -91,10 +91,10 @@ npm test
 ```powershell
 aster build PATH\your-app --aot
 aster verify PATH\your.app.ast --target lckfb-s3
-aster deploy PATH\your.app.ast --target lckfb-s3 --port COM22 --console COM24 --run
+aster deploy PATH\your.app.ast --target lckfb-s3 --port COM24 --run
 ```
 
-端口替换为设备实际端口。这是 APP 安装部署；不是整机固件烧录。设备 CPU、内存峰值、字体、外设及 AOT 执行还需真机验证。
+端口替换为设备实际端口。新版固件通过同一串口提供日志、shell 和文件传输；执行前关闭独立串口监视器。旧双串口固件仍可显式指定 `--port COM22 --console COM24`。这是 APP 安装部署；不是整机固件烧录。设备 CPU、内存峰值、字体、外设及 AOT 执行还需真机验证。
 
 ## 运行 SDK 2048 例程
 
@@ -106,3 +106,27 @@ aster deploy PATH\your.app.ast --target lckfb-s3 --port COM22 --console COM24 --
 ```
 
 包不存在时先使用与当前源码匹配的 SDK 编译：`aster build PATH\aster-sdk\apps\game.2048 --no-aot`，然后把实际输出的 `.ast` 路径传给模拟器。无需修改 2048 源码，也不要直接运行 C 源码或纯 `.aot`。点击“启用声音”可解除浏览器的自动播放限制。
+
+## 跟随 SDK 更新（2026-10-05）
+
+模拟器 0.2.0 已对照同级 SDK 的 ABI 3.7.0 契约，包含 `lckfb-s3` 和 `waveshare-35b` 显示预设。运行无需 SDK；`src/sdk-compat.json` 保存审核过的公开契约指纹及板卡尺寸。`--version` 报告模拟器版本、支持的 ABI、对照时的 SDK 提交和 API SHA256。SDK 工具发布版本与模拟器版本独立，提交不同不代表 APP 接口不兼容。
+
+```powershell
+# 在模拟器源码目录检查最新 SDK（默认同级 aster-sdk，也可传任意完整 SDK 路径）
+npm run check-sdk
+npm run check-sdk -- E:\path\to\aster-sdk
+.\out\aster-sim\aster-sim.exe --version
+# 使用 SDK 开发板原始显示尺寸；应用横竖屏声明仍然生效
+.\out\aster-sim\aster-sim.exe APP.ast --board lckfb-s3
+.\out\aster-sim\aster-sim.exe APP.ast --board waveshare-35b
+```
+
+预设与当前 SDK 一致：LCKFB 为 320×240，微雪为 320×480，均为 RGB565；实际应用会按 manifest 方向交换尺寸。`--resolution` 或 `--width` / `--height` 可覆盖预设，不传开发板时保留原有 240×320 默认尺寸。预设只选择显示尺寸，不模拟板卡 I2C、DMA 或 IMU 故障。
+
+SDK 更新后先运行 `check-sdk`。它检查真实契约文件与 lock 校验值、公开头文件/API 指纹、72 个 APP 导入处理函数及板卡尺寸/内存配置。即使 ABI 版本号相同，公开结构或签名改变也会报告失败；需要先审查并适配实现，再更新快照，不能只修改支持版本字符串。此检查覆盖接口一致性，不证明硬件行为完全等价。
+
+模拟器执行包中的 WASM，忽略 Xtensa AOT。SDK 共享串口、主机便携打包和多开发板工具链更新不改变 APP ABI，因此不需要为这些主机更新增加模拟器导入。最新版 APP 应先用当前 SDK 编译，再在 Windows 上执行 `npm test` 及外部 APP 集成测试，最后 `npm run portable` 刷新整个 `out/aster-sim`。发布时仍分发整个模拟器目录。
+
+修正了大屏面板画布的内存预算：完整 panel canvas 使用平台画布，不扣 APP 堆配额；非完整面板的请求退回普通 surface 并按 APP 堆预算检查。这样 IMU 立方体在 320×480 下不会因误扣一帧 307200 字节而返回 ENOMEM。
+
+本次验证：Windows 原生 Node 24 下 30 项测试全部通过（包括当前 SDK 重新编译的 2048 与 IMU 包）；便携 EXE 成功运行 2048 30 帧、320×480 IMU 30 帧、微雪目标 Hello 完成初始化及首帧后正常退出。大屏 IMU 截图已核查。未以此代替真机外设或 GUI 手动测试。
