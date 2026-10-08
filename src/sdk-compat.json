@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "abi": "3.7.0",
-  "sdkCommit": "eb02dc1810aad42d4784451fe65642aa18909f9f",
+  "sdkCommit": "2d1f6aa9e869cd1c46449414c41ae85e2abfdda3",
   "imports": [
     "__cxa_allocate_exception",
     "__cxa_begin_catch",
@@ -166,7 +166,7 @@
       "width": 320,
       "height": 480,
       "format": "rgb565",
-      "maxLinear": 2097152
+      "maxLinear": 7864320
     }
   }
 }

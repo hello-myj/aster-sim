@@ -5,7 +5,16 @@ const { performance } = require('node:perf_hooks');
 const { createCanvas, textFont, decodeImage, to565, from565, execGraphics } = require('./graphics');
 const { MemoryFS } = require('./memory-fs');
 const { validRelative } = require('./package');
+const compatibility = require('./sdk-compat.json');
 const E = { INVALID: -1, MEMORY: -2, UNSUPPORTED: -3, PERMISSION: -4, BUSY: -5, MISSING: -6, IO: -7, EXISTS: -9, HANDLE: -10, SPACE: -11, STATE: -12, AGAIN: -15, DEVICE: -16 };
+function boardMaxLinear(board) {
+  const profile = compatibility.boards[board];
+  return profile ? profile.maxLinear : compatibility.boards['lckfb-s3'].maxLinear;
+}
+function linearMemoryLabel(board) {
+  if (board === 'waveshare-35b') return '7.5 MiB';
+  return '2 MiB';
+}
 function errno(e) { return ({ ENOENT: -6, EEXIST: -9, EACCES: -4, EPERM: -4, ENOSPC: -11, EBADF: -10, ENOTDIR: -1, EISDIR: -1 })[e.code] || -7; }
 class Host {
   constructor(pkg, options = {}) {
@@ -30,6 +39,7 @@ class Host {
     for (const x of ['data', 'cache', 'kv']) this.storageFs.mkdirSync(path.join(this.root, x), { recursive: true });
     this.shared = path.resolve(options.state || path.join(__dirname, '../memory-session'), 'shared');
     for (const x of ['sd', 'music']) this.storageFs.mkdirSync(path.join(this.shared, x), { recursive: true });
+    this.maxLinear = boardMaxLinear(options.board);
     this.screen = createCanvas(this.width, this.height); this.presentCount = 0;
     this.send = options.send || (() => {});
     const names = { display: 0, touch: 1, mouse: 2, keyboard: 3, camera: 4, 'audio-in': 5, 'audio-out': 6, wifi: 7, bluetooth: 8, accelerometer: 9, gyroscope: 10, filesystem: 11, rtc: 12, psram: 13, framebuffer: 14 };
@@ -47,12 +57,12 @@ class Host {
   add(kind, value, type = 0) { const h = (type | this.nextHandle++) >>> 0; this.handles.set(h, { kind, ...value }); return h; }
   get(h, kind) { const v = this.handles.get(h >>> 0); if (!v || v.kind !== kind) throw Object.assign(Error('Bad handle'), { code: 'EBADF' }); return v; }
   alloc(n) {
-    if (n < 0 || n > 2 * 1024 * 1024) return 0;
+    if (n < 0 || n > this.maxLinear) return 0;
     n = Math.ceil(Math.max(n, 1) / 16) * 16;
     const i = this.freeBlocks.findIndex(x => x.n >= n);
     if (i >= 0) { const block = this.freeBlocks.splice(i, 1)[0]; if (block.n > n) this.freeBlocks.push({ p: block.p + n, n: block.n - n }); this.allocations.set(block.p, n); return block.p; }
     const p = this.heap, end = p + n;
-    if (end > Math.min(this.manifest.memory?.max || 2097152, 2097152)) return 0;
+    if (end > Math.min(this.manifest.memory?.max || this.maxLinear, this.maxLinear)) return 0;
     if (end > this.memory.buffer.byteLength) { try { this.memory.grow(Math.ceil((end - this.memory.buffer.byteLength) / 65536)); } catch { return 0; } }
     this.heap = end; this.allocations.set(p, n); return p;
   }
@@ -203,7 +213,7 @@ class Host {
     this.instance = new WebAssembly.Instance(module, { env: imports }); this.memory = this.instance.exports.memory;
     for (const name of ['aster_app_init', 'aster_app_event']) if (typeof this.instance.exports[name] !== 'function') throw Error(`Missing lifecycle export: ${name}`);
     if (!(this.memory instanceof WebAssembly.Memory) || !this.instance.exports.__heap_base) throw Error('APP must export memory and __heap_base (use SDK build)');
-    if (this.memory.buffer.byteLength > 2097152) throw Error('APP initial memory exceeds device 2 MiB limit');
+    if (this.memory.buffer.byteLength > this.maxLinear) throw Error(`APP initial memory exceeds device ${linearMemoryLabel(this.options.board)} limit`);
     this.heap = Math.ceil(Number(this.instance.exports.__heap_base.value) / 16) * 16;
     this.eventPtr = this.alloc(56); if (!this.eventPtr) throw Error('No event buffer memory');
     const rc = this.call('aster_app_init'); if (rc < 0) { this.stop(); throw Error(`aster_app_init failed: ${rc}`); }

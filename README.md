@@ -17,7 +17,7 @@ npm ci
 ```
 
 `--resolution` 是屏幕像素；`--scale` 只改变窗口显示倍数。manifest 声明横屏/竖屏时会相应交换宽高。
-分辨率可以改变，但 APP 自己的最小尺寸限制、2 MiB WASM 内存和 surface heap 预算仍然生效。
+分辨率可以改变，但 APP 自己的最小尺寸限制、WASM 内存和 surface heap 预算仍然生效。默认和 lckfb-s3 的 WASM 内存上限是 2 MiB，`--board waveshare-35b` 使用 7.5 MiB（7864320）。
 关闭浏览器不会停止模拟器；使用界面“结束”或终端 Ctrl+C。暂停/恢复及重载遵循 APP 生命周期。
 
 ```powershell

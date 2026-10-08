@@ -15,7 +15,7 @@ module.exports = {
     const strdup = p => { const b = Buffer.from(this.cstring(p) + '\0'), ptr = this.alloc(b.length); if (ptr) this.bytes(ptr, b.length).set(b); return ptr; };
     const a = {
       malloc: n => this.alloc(n), free: p => this.free(p),
-      calloc: (n, size) => { if (n * size > 2097152 || n < 0 || size < 0) return 0; const p = this.alloc(n * size); if (p) this.bytes(p, n * size).fill(0); return p; },
+      calloc: (n, size) => { if (n * size > this.maxLinear || n < 0 || size < 0) return 0; const p = this.alloc(n * size); if (p) this.bytes(p, n * size).fill(0); return p; },
       realloc: (p, n) => { if (!n) { this.free(p); return 0; } const out = this.alloc(n); if (out && p) { this.bytes(out, Math.min(n, this.allocations.get(p) || 0)).set(this.bytes(p, Math.min(n, this.allocations.get(p) || 0))); this.free(p); } return out; },
       memcpy: (d, s, n) => { const b = Buffer.from(this.bytes(s, n)); this.bytes(d, n).set(b); return d; },
       memmove: (d, s, n) => { const b = Buffer.from(this.bytes(s, n)); this.bytes(d, n).set(b); return d; },
