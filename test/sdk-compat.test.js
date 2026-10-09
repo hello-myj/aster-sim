@@ -7,15 +7,12 @@ const os = require('node:os');
 const snapshot = require('../src/sdk-compat.json');
 const { parse } = require('../src/cli');
 const { checkSdk } = require('../scripts/check-sdk');
-test('board presets use SDK dimensions and explicit sizes win in either argument order', () => {
-  for (const [id, board] of Object.entries(snapshot.boards)) {
-    const opts = parse(['demo.ast', '--board', id]);
-    assert.equal(opts.width, board.width); assert.equal(opts.height, board.height);
-    for (const args of [['--resolution', '480x800', '--board', id], ['--board', id, '--resolution', '480x800']]) {
-      const override = parse(['demo.ast', ...args]); assert.equal(override.width, 480); assert.equal(override.height, 800);
-    }
-  }
-  assert.throws(() => parse(['demo.ast', '--board', 'unknown']), /Unknown board/);
+test('resolution selects the window and board flags are not accepted', () => {
+  assert.equal(parse(['demo.ast']).width, 240); assert.equal(parse(['demo.ast']).height, 320);
+  assert.equal(parse(['demo.ast', '--resolution', '480x800']).width, 480);
+  assert.equal(parse(['demo.ast', '--resolution', '480x800']).height, 800);
+  assert.throws(() => parse(['demo.ast', '--board', 'lckfb-s3']), /Unknown option/);
+  assert.throws(() => parse(['demo.ast', '--target', 'xtensa']), /Unknown option/);
   assert.deepEqual(parse(['--version']), { version: true });
 });
 test('SDK compatibility check rejects same-ABI public structure changes', t => {
@@ -35,34 +32,26 @@ function wasmWithMemory(initialPages, maxPages) {
   for (const [name, kind, index] of [['memory', 2, 0], ['__heap_base', 3, 0], ['aster_app_init', 0, 0], ['aster_app_event', 0, 1]]) exports.push(name.length, ...Buffer.from(name), kind, index);
   section(7, exports); section(10, [2, 4, 0, 0x41, 0, 0x0b, 2, 0, 0x0b]); return Buffer.from(bytes);
 }
-test('WASM linear memory ceiling follows the selected board', t => {
+test('linear memory follows the package maximum, not a board profile', t => {
   const { Host } = require('../src/host');
-  const pkg = manifest => ({ manifest, assets: new Map(), wasm: wasmWithMemory(1, 127) });
-  const base = { id: 'test.memlimit', permissions: [] };
-  const open = board => {
-    const h = new Host(pkg(base), board ? { board } : {});
+  const pkg = manifest => ({ manifest, assets: new Map(), wasm: wasmWithMemory(manifest.pages || 1, 127) });
+  const open = manifest => {
+    const h = new Host(pkg(manifest), {});
     h.memory = new WebAssembly.Memory({ initial: 1, maximum: 127 }); h.heap = 65536;
     t.after(() => h.stop());
     return h;
   };
-  const fallback = open(); const lckfb = open('lckfb-s3'); const waveshare = open('waveshare-35b');
-  assert.equal(fallback.maxLinear, snapshot.boards['lckfb-s3'].maxLinear);
-  assert.equal(lckfb.maxLinear, 2097152);
-  assert.equal(waveshare.maxLinear, snapshot.boards['waveshare-35b'].maxLinear);
-  assert.equal(waveshare.maxLinear, 7864320);
-  assert.equal(fallback.alloc(2097153), 0);
-  assert.equal(lckfb.alloc(2097153), 0);
-  assert.ok(waveshare.alloc(3 * 1024 * 1024) > 0);
-  assert.equal(waveshare.alloc(7864321), 0);
-  const overDefault = new Host({ ...pkg(base), wasm: wasmWithMemory(33, 127) }, {});
-  t.after(() => overDefault.stop());
-  assert.throws(() => overDefault.start(), /APP initial memory exceeds device 2 MiB limit/);
-  const overWaveshare = new Host({ ...pkg(base), wasm: wasmWithMemory(121, 127) }, { board: 'waveshare-35b' });
-  t.after(() => overWaveshare.stop());
-  assert.throws(() => overWaveshare.start(), /APP initial memory exceeds device 7\.5 MiB limit/);
-  const fitWaveshare = new Host({ ...pkg(base), wasm: wasmWithMemory(120, 127) }, { board: 'waveshare-35b' });
-  t.after(() => fitWaveshare.stop());
-  assert.doesNotThrow(() => fitWaveshare.start());
+  const openEnded = open({ id: 'test.memlimit', permissions: [] });
+  assert.ok(openEnded.alloc(3 * 1024 * 1024) > 0);
+  const capped = open({ id: 'test.memlimit', permissions: [], memory: { max: 262144 } });
+  assert.equal(capped.maxLinear, 262144);
+  assert.equal(capped.alloc(262145), 0);
+  const over = new Host({ manifest: { id: 'test.memlimit', permissions: [], memory: { max: 131072 } }, assets: new Map(), wasm: wasmWithMemory(3, 127) }, {});
+  t.after(() => over.stop());
+  assert.throws(() => over.start(), /package maximum/);
+  const fit = new Host({ manifest: { id: 'test.memlimit', permissions: [] }, assets: new Map(), wasm: wasmWithMemory(33, 127) }, {});
+  t.after(() => fit.stop());
+  assert.doesNotThrow(() => fit.start());
 });
 test('full-panel 320x480 canvas uses platform memory; ordinary and partial surfaces use APP heap', t => {
   const { Host } = require('../src/host');
@@ -81,4 +70,24 @@ test('full-panel 320x480 canvas uses platform memory; ordinary and partial surfa
   assert.equal(api.aster_surface_create(desc, 24, out), 0);
   assert.equal(api.aster_surface_acquire(h.u32(out), buf, 32), 0);
   assert.ok(h.u32(buf + 8) > 0); assert.equal(h.u32(buf + 28), 0);
+});
+test('scale-fit keeps the app buffer and inverse-maps touch into it', t => {
+  const { Host } = require('../src/host');
+  const h = new Host({ manifest: { id: 'test.scalefit', permissions: [], memory: { heap: 262144 } }, assets: new Map() }, { width: 200, height: 100 });
+  h.memory = new WebAssembly.Memory({ initial: 4 }); h.heap = 4096;
+  t.after(() => h.stop());
+  const api = h.imports(), desc = h.alloc(24), out = h.alloc(4), buf = h.alloc(32);
+  h.u32(desc, 24); h.u32(desc + 4, 1); h.u32(desc + 8, 100); h.u32(desc + 12, 100); h.u32(desc + 16, 0x1002); h.u32(desc + 20, 3);
+  assert.equal(api.aster_surface_create(desc, 24, out), -1);
+  h.u32(desc + 20, 2); h.u32(desc + 8, 0);
+  assert.equal(api.aster_surface_create(desc, 24, out), -1);
+  h.u32(desc + 8, 100);
+  assert.equal(api.aster_surface_create(desc, 24, out), 0);
+  h.u32(buf, 32); h.u32(buf + 4, 1);
+  assert.equal(api.aster_surface_acquire(h.u32(out), buf, 32), 0);
+  assert.equal(h.u32(buf + 12), 100); assert.equal(h.u32(buf + 28), 2);
+  assert.equal(api.aster_surface_present(h.u32(out)), 0);
+  assert.deepEqual(h.mapTouch(0, 50), { x: 0, y: 50 });
+  assert.deepEqual(h.mapTouch(100, 50), { x: 50, y: 50 });
+  assert.deepEqual(h.mapTouch(199, 0), { x: 99, y: 0 });
 });

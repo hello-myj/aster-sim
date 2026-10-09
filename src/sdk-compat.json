@@ -148,25 +148,11 @@
     "include/aster/kv.h": "b3be1a979044d53f25920e5a62b8990281e81888ef0e5e354302bfb68935f2ba",
     "include/aster/log.h": "8c5a616cd2d98f4b635592c5d7142c1c810b029868ef39e0cf3f39ace1319e9f",
     "include/aster/sensor.h": "5d8b2b6f211d1cb06d4e5378f0b083100ad48db40d068f6317ae61fb634aca72",
-    "include/aster/surface.h": "5bd9967db19b45d43119b6810c5f8293ad9575e314db59db5437d754da6fb594",
+    "include/aster/surface.h": "8cd5d99b21da830c4945e652a2a5981dc844dcc0f06fa5af198dd144d21e54f8",
     "include/aster/system.h": "c1b67c53ce62c91b9255af8d325e7efe60a5515b949dd3c7bf8e7f485f33fefa",
     "include/aster/time.h": "6f6832715655566df7be77cc878634eb27ce202872bdc656319a680a4ce3e9a9",
     "include/aster/timer.h": "24bc78986dc054fa1cb1af45dc890cf2a046487349bcc33ccb915f23db4aad6a",
     "include/aster/types.h": "0cb93a2d20fd26f58d568584de694aa559a085d239f177b0d14a332ee3764ce2",
     "include/aster/wifi.h": "e9eada9ad04236fee948162054577144c001c2babc6a9516c1683c89d39125e3"
-  },
-  "boards": {
-    "lckfb-s3": {
-      "width": 320,
-      "height": 240,
-      "format": "rgb565",
-      "maxLinear": 2097152
-    },
-    "waveshare-35b": {
-      "width": 320,
-      "height": 480,
-      "format": "rgb565",
-      "maxLinear": 7864320
-    }
   }
 }

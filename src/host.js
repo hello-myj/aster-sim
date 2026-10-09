@@ -5,15 +5,18 @@ const { performance } = require('node:perf_hooks');
 const { createCanvas, textFont, decodeImage, to565, from565, execGraphics } = require('./graphics');
 const { MemoryFS } = require('./memory-fs');
 const { validRelative } = require('./package');
-const compatibility = require('./sdk-compat.json');
 const E = { INVALID: -1, MEMORY: -2, UNSUPPORTED: -3, PERMISSION: -4, BUSY: -5, MISSING: -6, IO: -7, EXISTS: -9, HANDLE: -10, SPACE: -11, STATE: -12, AGAIN: -15, DEVICE: -16 };
-function boardMaxLinear(board) {
-  const profile = compatibility.boards[board];
-  return profile ? profile.maxLinear : compatibility.boards['lckfb-s3'].maxLinear;
+function declaredMax(manifest) {
+  const max = Number(manifest.memory?.max);
+  return Number.isFinite(max) && max > 0 ? max : 0x100000000;
 }
-function linearMemoryLabel(board) {
-  if (board === 'waveshare-35b') return '7.5 MiB';
-  return '2 MiB';
+function fitBox(bw, bh, gw, gh) {
+  let dw, dh;
+  if (gw * bh <= gh * bw) { dw = gw; dh = Math.floor((bh * gw) / bw); }
+  else { dh = gh; dw = Math.floor((bw * gh) / bh); }
+  dw = Math.max(1, Math.min(gw, dw || 1));
+  dh = Math.max(1, Math.min(gh, dh || 1));
+  return { bw, bh, dw, dh, mx: Math.floor((gw - dw) / 2), my: Math.floor((gh - dh) / 2) };
 }
 function errno(e) { return ({ ENOENT: -6, EEXIST: -9, EACCES: -4, EPERM: -4, ENOSPC: -11, EBADF: -10, ENOTDIR: -1, EISDIR: -1 })[e.code] || -7; }
 class Host {
@@ -39,7 +42,8 @@ class Host {
     for (const x of ['data', 'cache', 'kv']) this.storageFs.mkdirSync(path.join(this.root, x), { recursive: true });
     this.shared = path.resolve(options.state || path.join(__dirname, '../memory-session'), 'shared');
     for (const x of ['sd', 'music']) this.storageFs.mkdirSync(path.join(this.shared, x), { recursive: true });
-    this.maxLinear = boardMaxLinear(options.board);
+    this.maxLinear = declaredMax(this.manifest);
+    this.fit = null;
     this.screen = createCanvas(this.width, this.height); this.presentCount = 0;
     this.send = options.send || (() => {});
     const names = { display: 0, touch: 1, mouse: 2, keyboard: 3, camera: 4, 'audio-in': 5, 'audio-out': 6, wifi: 7, bluetooth: 8, accelerometer: 9, gyroscope: 10, filesystem: 11, rtc: 12, psram: 13, framebuffer: 14 };
@@ -86,7 +90,25 @@ class Host {
   readVirtual(p, n) { const v = this.virtual(p, n); if (v.area === 'assets') { const b = this.pkg.assets.get(v.rel); if (!b) throw Object.assign(Error('Missing asset'), { code: 'ENOENT' }); return b; } return this.storageFs.readFileSync(v.path); }
   syncIn(s) { if (s.ptr) from565(s.canvas, this.bytes(s.ptr, s.w * s.h * 2)); }
   syncOut(s) { if (s.ptr) to565(s.canvas).copy(this.buffer(), s.ptr); }
-  present(s) { this.syncIn(s); const c = this.screen.getContext('2d'); c.clearRect(0, 0, this.width, this.height); c.drawImage(s.canvas, 0, 0); this.presentCount++; this.send({ type: 'frame', data: this.screen.toBuffer('image/png') }); return 0; }
+  present(s) {
+    this.syncIn(s); const c = this.screen.getContext('2d');
+    c.fillStyle = '#000'; c.fillRect(0, 0, this.width, this.height);
+    if (s.flags & 2) {
+      const fit = fitBox(s.w, s.h, this.width, this.height);
+      c.drawImage(s.canvas, fit.mx, fit.my, fit.dw, fit.dh);
+      this.fit = fit;
+    } else { c.drawImage(s.canvas, 0, 0); this.fit = null; }
+    this.presentCount++; this.send({ type: 'frame', data: this.screen.toBuffer('image/png') }); return 0;
+  }
+  mapTouch(x, y) {
+    x = Math.max(0, Math.min(this.width - 1, Math.floor(x)));
+    y = Math.max(0, Math.min(this.height - 1, Math.floor(y)));
+    if (!this.fit) return { x, y };
+    let rx = x - this.fit.mx, ry = y - this.fit.my;
+    if (rx < 0) rx = 0; if (ry < 0) ry = 0;
+    if (rx >= this.fit.dw) rx = this.fit.dw - 1; if (ry >= this.fit.dh) ry = this.fit.dh - 1;
+    return { x: Math.min(this.fit.bw - 1, Math.floor(rx * this.fit.bw / this.fit.dw)), y: Math.min(this.fit.bh - 1, Math.floor(ry * this.fit.bh / this.fit.dh)) };
+  }
   log(level, message) { const item = { level, message, ms: this.now() }; this.logs.push(item); if (this.logs.length > 200) this.logs.shift(); this.options.log?.(item); this.send({ type: 'log', ...item }); }
   imports() {
     const a = {
@@ -110,15 +132,20 @@ class Host {
       aster_timer_destroy: h => { this.get(h, 'timer'); this.handles.delete(h); return 0; },
       aster_surface_create: (p, n, out) => {
         if (n < 24 || this.u32(p) < 24 || this.u32(p + 4) !== 1) return -1;
-        const flags = this.u32(p + 20), w = this.u32(p + 8) || ((flags & 1) ? this.width : 0), h = this.u32(p + 12) || ((flags & 1) ? this.height : 0), fmt = this.u32(p + 16);
-        if (fmt !== 0x1002 && fmt !== 0xffff) return -3; if (!w || !h || w > 4096 || h > 4096 || flags & ~1) return -1;
+        const flags = this.u32(p + 20), fmt = this.u32(p + 16);
+        if ((flags & 1) && (flags & 2)) return -1;
+        let w = this.u32(p + 8), h = this.u32(p + 12);
+        if (flags & 2) { if (!w || !h) return -1; }
+        else { w = w || ((flags & 1) ? this.width : 0); h = h || ((flags & 1) ? this.height : 0); }
+        if (fmt !== 0x1002 && fmt !== 0xffff) return -3; if (!w || !h || w > 4096 || h > 4096 || flags & ~3) return -1;
         this.bytes(out, 4);
         // Full-panel canvases live in platform memory, as in firmware.
         // Partial canvases fall back to an ordinary APP-owned surface.
         const canvasFlags = (flags & 1) && w === this.width && h === this.height ? 1 : 0;
+        const granted = canvasFlags | ((flags & 2) ? 2 : 0);
         const used = [...this.handles.values()].filter(v => v.kind === 'surface' && !(v.flags & 1)).reduce((n, s) => n + s.w * s.h * 2, 0);
         if (used + (canvasFlags ? 0 : w * h * 2) > (this.manifest.memory?.heap || 262144)) return -2;
-        this.u32(out, this.add('surface', { w, h, flags: canvasFlags, ptr: 0, canvas: createCanvas(w, h) }, 0x02000000)); return 0;
+        this.u32(out, this.add('surface', { w, h, flags: granted, ptr: 0, canvas: createCanvas(w, h) }, 0x02000000)); return 0;
       },
       aster_surface_destroy: h => { const s = this.get(h, 'surface'); if (s.ptr) this.free(s.ptr); this.handles.delete(h); return 0; },
       aster_surface_acquire: (h, p, n) => {
@@ -213,7 +240,7 @@ class Host {
     this.instance = new WebAssembly.Instance(module, { env: imports }); this.memory = this.instance.exports.memory;
     for (const name of ['aster_app_init', 'aster_app_event']) if (typeof this.instance.exports[name] !== 'function') throw Error(`Missing lifecycle export: ${name}`);
     if (!(this.memory instanceof WebAssembly.Memory) || !this.instance.exports.__heap_base) throw Error('APP must export memory and __heap_base (use SDK build)');
-    if (this.memory.buffer.byteLength > this.maxLinear) throw Error(`APP initial memory exceeds device ${linearMemoryLabel(this.options.board)} limit`);
+    if (this.memory.buffer.byteLength > this.maxLinear) throw Error('APP initial memory exceeds the package maximum');
     this.heap = Math.ceil(Number(this.instance.exports.__heap_base.value) / 16) * 16;
     this.eventPtr = this.alloc(56); if (!this.eventPtr) throw Error('No event buffer memory');
     const rc = this.call('aster_app_init'); if (rc < 0) { this.stop(); throw Error(`aster_app_init failed: ${rc}`); }
@@ -234,7 +261,7 @@ class Host {
   }
   input(msg) {
     if (msg.type === 'audio-feedback') { this.audioFeedback(msg); return; }
-    if (msg.type === 'touch') { const x = Math.max(0, Math.min(this.width - 1, Math.floor(msg.x))), y = Math.max(0, Math.min(this.height - 1, Math.floor(msg.y))); if (![1, 2, 3].includes(msg.action)) return; this.touch = msg.action === 3 ? null : { x, y, action: msg.action }; this.event(2, [x, y, msg.action, 0]); }
+    if (msg.type === 'touch') { if (![1, 2, 3].includes(msg.action)) return; const m = this.mapTouch(msg.x, msg.y); this.touch = msg.action === 3 ? null : { x: m.x, y: m.y, action: msg.action }; this.event(2, [m.x, m.y, msg.action, 0]); }
     if (msg.type === 'key' && Number.isInteger(msg.code) && msg.code > 0 && msg.code < 768) { if (msg.pressed) this.keys.add(msg.code); else this.keys.delete(msg.code); this.event(4, [msg.code, msg.pressed ? 1 : 0]); }
     if (msg.type === 'sensor') { for (const name of ['accel', 'gyro']) if (Array.isArray(msg[name]) && msg[name].length === 3 && msg[name].every(Number.isFinite)) this[name] = msg[name]; }
     if (msg.type === 'pause') { this.setPaused(!this.paused); }

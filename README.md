@@ -17,7 +17,7 @@ npm ci
 ```
 
 `--resolution` 是屏幕像素；`--scale` 只改变窗口显示倍数。manifest 声明横屏/竖屏时会相应交换宽高。
-分辨率可以改变，但 APP 自己的最小尺寸限制、WASM 内存和 surface heap 预算仍然生效。默认和 lckfb-s3 的 WASM 内存上限是 2 MiB，`--board waveshare-35b` 使用 7.5 MiB（7864320）。
+分辨率选择窗口（玻璃）。没有请求 scale-fit 表面时，窗口像素就是应用绘图坐标。请求了 scale-fit 并给出自己的缓冲尺寸时，模拟器用与固件相同的 keep 公式把缓冲居中铺进窗口，左右或上下留黑边，触摸按该比例映回缓冲。WASM 内存上限来自包里声明的最大值，不按开发板预设。
 关闭浏览器不会停止模拟器；使用界面“结束”或终端 Ctrl+C。暂停/恢复及重载遵循 APP 生命周期。
 
 ```powershell
@@ -109,7 +109,7 @@ aster deploy PATH\your.app.ast --target lckfb-s3 --port COM24 --run
 
 ## 跟随 SDK 更新（2026-10-05）
 
-模拟器 0.2.0 已对照同级 SDK 的 ABI 3.7.0 契约，包含 `lckfb-s3` 和 `waveshare-35b` 显示预设。运行无需 SDK；`src/sdk-compat.json` 保存审核过的公开契约指纹及板卡尺寸。`--version` 报告模拟器版本、支持的 ABI、对照时的 SDK 提交和 API SHA256。SDK 工具发布版本与模拟器版本独立，提交不同不代表 APP 接口不兼容。
+模拟器 0.2.0 已对照同级 SDK 的 ABI 3.7.0 契约。运行无需 SDK；`src/sdk-compat.json` 保存审核过的公开契约指纹。窗口大小只由分辨率决定，不读取包的 `target_id`，也没有 `--board` / `--target`。`--version` 报告模拟器版本、支持的 ABI、对照时的 SDK 提交和 API SHA256。SDK 工具发布版本与模拟器版本独立，提交不同不代表 APP 接口不兼容。
 
 ```powershell
 # 在模拟器源码目录检查最新 SDK（默认同级 aster-sdk，也可传任意完整 SDK 路径）
@@ -117,8 +117,8 @@ npm run check-sdk
 npm run check-sdk -- E:\path\to\aster-sdk
 .\out\aster-sim\aster-sim.exe --version
 # 使用 SDK 开发板原始显示尺寸；应用横竖屏声明仍然生效
-.\out\aster-sim\aster-sim.exe APP.ast --board lckfb-s3
-.\out\aster-sim\aster-sim.exe APP.ast --board waveshare-35b
+.\out\aster-sim\aster-sim.exe APP.ast --resolution 240x320
+.\out\aster-sim\aster-sim.exe APP.ast --resolution 320x480
 ```
 
 预设与当前 SDK 一致：LCKFB 为 320×240，微雪为 320×480，均为 RGB565；实际应用会按 manifest 方向交换尺寸。`--resolution` 或 `--width` / `--height` 可覆盖预设，不传开发板时保留原有 240×320 默认尺寸。预设只选择显示尺寸，不模拟板卡 I2C、DMA 或 IMU 故障。

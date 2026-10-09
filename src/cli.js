@@ -11,8 +11,7 @@ const compatibility = require('./sdk-compat.json');
 const version = '0.2.0';
 const help = `aster-sim ${version} — Aster ABI 3.7 WASM APP simulator
 Usage: aster-sim APP.ast [--resolution 240x320] [options]
-  --board ID             SDK display preset: lckfb-s3 or waveshare-35b
-  --width N --height N    Alternative screen size; manifest orientation applies
+  --width N --height N    Window size; manifest orientation applies. This is the glass.
   --scale N              Window display scale (default 2; APP pixels unchanged)
   --headless --frames N  Run N frames without a window (CI; default 120)
   --screenshot FILE.png  Save final screen on exit
@@ -35,17 +34,14 @@ function parse(argv) {
   const opts = { width: 240, height: 320, scale: 2, port: 0, watchdog: 10, files: [] };
   const booleans = { '--headless': 'headless', '--no-open': 'noOpen', '--no-audio': 'noAudio', '--wifi': 'wifi' };
   const values = { '--width': 'width', '--height': 'height', '--scale': 'scale', '--port': 'port', '--frames': 'frames', '--watchdog': 'watchdog', '--state': 'state', '--apps': 'apps', '--camera': 'camera', '--pcm-input': 'pcmInput', '--screenshot': 'screenshot', '--manifest': 'manifest', '--pubkey': 'pubkey' };
-  let explicitWidth = false, explicitHeight = false;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]; if (arg === '--version') return { version: true };
-    if (arg === '--board') { const id = argv[++i]; if (!compatibility.boards[id]) throw Error(`Unknown board: ${id}; supported: ${Object.keys(compatibility.boards).join(', ')}`); opts.board = id; continue; }
     if (arg === '--help' || arg === '-h') return { help: true };
     if (booleans[arg]) { opts[booleans[arg]] = true; continue; }
-    if (arg === '--resolution') { const match = /^(\d+)[xX](\d+)$/.exec(argv[++i] || ''); if (!match) throw Error('Resolution must be WIDTHxHEIGHT'); opts.width = Number(match[1]); opts.height = Number(match[2]); explicitWidth = explicitHeight = true; continue; }
-    if (values[arg]) { if (!argv[i + 1] || argv[i + 1].startsWith('--')) throw Error(`Missing value for ${arg}`); const key = values[arg], value = argv[++i]; if (key === 'width') explicitWidth = true; if (key === 'height') explicitHeight = true; opts[key] = ['width', 'height', 'scale', 'port', 'frames', 'watchdog'].includes(key) ? Number(value) : path.resolve(value); continue; }
+    if (arg === '--resolution') { const match = /^(\d+)[xX](\d+)$/.exec(argv[++i] || ''); if (!match) throw Error('Resolution must be WIDTHxHEIGHT'); opts.width = Number(match[1]); opts.height = Number(match[2]); continue; }
+    if (values[arg]) { if (!argv[i + 1] || argv[i + 1].startsWith('--')) throw Error(`Missing value for ${arg}`); const key = values[arg], value = argv[++i]; opts[key] = ['width', 'height', 'scale', 'port', 'frames', 'watchdog'].includes(key) ? Number(value) : path.resolve(value); continue; }
     if (arg.startsWith('-')) throw Error(`Unknown option: ${arg}`); if (opts.files.length) throw Error('Pass one APP; use --apps for catalog'); opts.files.push(path.resolve(arg));
   }
-  if (opts.board) { const board = compatibility.boards[opts.board]; if (!explicitWidth) opts.width = board.width; if (!explicitHeight) opts.height = board.height; }
   if (!opts.files.length) throw Error('APP path required; use --help');
   for (const name of ['width', 'height']) if (!Number.isInteger(opts[name]) || opts[name] < 16 || opts[name] > 2048) throw Error(`${name} must be 16..2048`);
   if (!Number.isFinite(opts.scale) || opts.scale < 0.25 || opts.scale > 8) throw Error('scale must be 0.25..8');
@@ -110,5 +106,5 @@ async function main(opts) {
   worker.on('exit', code => { if (!done && code) cleanup(code); });
   process.once('SIGINT', () => worker.postMessage({ type: 'stop' }));
 }
-if (require.main === module) { try { const opts = parse(process.argv.slice(2)); if (opts.help) console.log(help); else if (opts.version) console.log(JSON.stringify({ simulator: version, abi: compatibility.abi, sdkCommit: compatibility.sdkCommit, apiSha256: compatibility.contractHashes['contract/api.json'], boards: Object.keys(compatibility.boards) }, null, 2)); else main(opts).catch(e => { console.error(e.stack); process.exitCode = 1; }); } catch (e) { console.error(e.message); process.exitCode = 1; } }
+if (require.main === module) { try { const opts = parse(process.argv.slice(2)); if (opts.help) console.log(help); else if (opts.version) console.log(JSON.stringify({ simulator: version, abi: compatibility.abi, sdkCommit: compatibility.sdkCommit, apiSha256: compatibility.contractHashes['contract/api.json'] }, null, 2)); else main(opts).catch(e => { console.error(e.stack); process.exitCode = 1; }); } catch (e) { console.error(e.message); process.exitCode = 1; } }
 module.exports = { parse, main };

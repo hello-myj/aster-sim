@@ -26,13 +26,15 @@ function checkSdk(root) {
       assert.equal(typeof handlers[name], 'function', `Missing APP API implementation: ${name}`);
     }
   } finally { host.stop(); }
-  const boards = {};
-  for (const name of fs.readdirSync(path.join(root, 'targets')).filter(name => name.endsWith('.json')).sort()) {
-    const target = read(`targets/${name}`);
-    boards[target.id] = { width: target.display.width, height: target.display.height, format: target.display.format, maxLinear: target.memory.max_linear };
+  const platforms = fs.readdirSync(path.join(root, 'targets')).filter(name => name.endsWith('.json')).map(name => name.slice(0, -5)).sort();
+  assert.ok(platforms.includes('xtensa'), 'SDK platform target xtensa is missing');
+  for (const name of platforms) {
+    const target = read(`targets/${name}.json`);
+    assert.equal(target.id, name);
+    assert.equal(target.memory?.max_linear, undefined, 'platform targets do not carry a board memory cap');
+    assert.equal(target.display, undefined, 'platform targets do not select a panel');
   }
-  assert.deepEqual(boards, snapshot.boards, 'SDK board display or memory profiles changed');
-  return { abi: snapshot.abi, publicImports: api.imports.env.filter(name => name.startsWith('aster_')).length, boards: Object.keys(boards) };
+  return { abi: snapshot.abi, publicImports: api.imports.env.filter(name => name.startsWith('aster_')).length, platforms };
 }
 if (require.main === module) {
   try { console.log(JSON.stringify(checkSdk(path.resolve(process.argv[2] || path.join(__dirname, '../../aster-sdk'))), null, 2)); }
