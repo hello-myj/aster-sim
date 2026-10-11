@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "abi": "3.7.0",
-  "sdkCommit": "3f26c06991c445abd49f135c7f1a22a63a91cd4c",
+  "sdkCommit": "5e9c124dd03a0eb95bb30159befb9235919f0760",
   "imports": [
     "__cxa_allocate_exception",
     "__cxa_begin_catch",
@@ -138,7 +138,7 @@
     "include/aster/display.h": "324f406354060434933ef7020abeb86960a7abbd671036dc4856a41133d05962",
     "include/aster/error.h": "b5c4b5f3e005b34d7cf0199f557f98caed5b06f0ef94e227957b34a0ae5ed95f",
     "include/aster/event.h": "bd636455b92a309158273ec38a3b17f2bbc159c5ef3ce30b123064d5bc5188af",
-    "include/aster/font_metrics.h": "22d5cf498b2f2adc7605f3655487b98a0b05735fcf332aa672a27924950683e4",
+    "include/aster/font_metrics.h": "5c3cf725bf809ab6ac525087938d384e1a0bf72a4391e7c21625d68380392213",
     "include/aster/fs.h": "961140a1b1c4c63f77ded3358048a4525f87637a90dd5b9717372eaec4f6d635",
     "include/aster/gfx.h": "44e929f8968b0fdc9e961459c2dc1d1cd94705adc9dbd722930b89f7b0fa007a",
     "include/aster/icon.h": "f0b618d9ba2b4e2803a79a90482db4ed1127010cbeaaefc2c96ef36c25674751",
@@ -154,5 +154,57 @@
     "include/aster/timer.h": "24bc78986dc054fa1cb1af45dc890cf2a046487349bcc33ccb915f23db4aad6a",
     "include/aster/types.h": "0cb93a2d20fd26f58d568584de694aa559a085d239f177b0d14a332ee3764ce2",
     "include/aster/wifi.h": "e9eada9ad04236fee948162054577144c001c2babc6a9516c1683c89d39125e3"
-  }
+  },
+  "fontFaces": [
+    {
+      "px": 20,
+      "line_h": 26,
+      "asc": 21
+    },
+    {
+      "px": 12,
+      "line_h": 16,
+      "asc": 13
+    },
+    {
+      "px": 14,
+      "line_h": 18,
+      "asc": 15
+    },
+    {
+      "px": 16,
+      "line_h": 21,
+      "asc": 17
+    },
+    {
+      "px": 18,
+      "line_h": 24,
+      "asc": 19
+    },
+    {
+      "px": 24,
+      "line_h": 31,
+      "asc": 26
+    },
+    {
+      "px": 28,
+      "line_h": 37,
+      "asc": 30
+    },
+    {
+      "px": 32,
+      "line_h": 42,
+      "asc": 34
+    },
+    {
+      "px": 40,
+      "line_h": 52,
+      "asc": 42
+    },
+    {
+      "px": 48,
+      "line_h": 63,
+      "asc": 51
+    }
+  ]
 }

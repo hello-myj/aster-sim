@@ -10,7 +10,17 @@ for (const f of ['C:/Windows/Fonts/msyh.ttc', 'C:/Windows/Fonts/segoeui.ttf']) {
 const rgb = c => [((c >> 11) & 31) * 255 / 31, ((c >> 5) & 63) * 255 / 63, (c & 31) * 255 / 31].map(Math.round);
 const color = c => `rgb(${rgb(c).join(',')})`;
 const lo = v => v << 16 >> 16, hi = v => v >> 16;
-const snap = px => Math.abs(px - 16) < Math.abs(px - 20) ? 16 : 20;
+const fontFaces = require('./sdk-compat.json').fontFaces;
+function fontFace(px) {
+  if (px === 0) return fontFaces[0];
+  let selected = fontFaces[0], best = Infinity;
+  for (const face of fontFaces) {
+    const distance = Math.abs(px - face.px);
+    if (distance < best) { selected = face; best = distance; }
+  }
+  return selected;
+}
+const snap = px => fontFace(px).px;
 function textFont(c, px) { c.font = `${snap(px)}px "Microsoft YaHei", "Segoe UI", sans-serif`; c.textBaseline = 'alphabetic'; }
 function decodeImage(bytes, cw, ch) {
   let decoded;
@@ -74,7 +84,7 @@ function execGraphics(host, s, ptr, n, arena, arenaLen, px, py, pw, ph) {
       case 7: {
         if (w[3] + w[4] > arenaLen) return -1;
         textFont(c, a); const text = host.string(arena + w[3], w[4]);
-        if (w[5] & 65536) { c.fillStyle = color(w[5]); c.fillRect(x, y - (snap(a) === 20 ? 21 : 17), c.measureText(text).width, snap(a) === 20 ? 26 : 21); }
+        if (w[5] & 65536) { c.fillStyle = color(w[5]); const face = fontFace(a); c.fillRect(x, y - face.asc, c.measureText(text).width, face.line_h); }
         c.fillStyle = color(b); c.fillText(text, x, y); break;
       }
       case 9: case 10: case 11: case 12: {
@@ -90,4 +100,4 @@ function execGraphics(host, s, ptr, n, arena, arenaLen, px, py, pw, ph) {
   if (pw && ph) host.present(s);
   return n;
 }
-module.exports = { createCanvas, textFont, decodeImage, to565, from565, execGraphics };
+module.exports = { createCanvas, fontFace, snap, textFont, decodeImage, to565, from565, execGraphics };

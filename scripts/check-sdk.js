@@ -18,6 +18,12 @@ function checkSdk(root) {
     const actual = crypto.createHash('sha256').update(fs.readFileSync(path.join(root, name))).digest('hex');
     assert.equal(actual, expected, `SDK contract lock mismatch: ${name}`);
   }
+  const fontHeader = fs.readFileSync(path.join(root, 'include/aster/font_metrics.h'), 'utf8');
+  const fontMacro = /^#define ASTER_FONT_FACE_METRICS\s+(.+)$/m.exec(fontHeader);
+  assert.ok(fontMacro, 'SDK native font metrics missing');
+  const faces = [...fontMacro[1].matchAll(/\{\s*(\d+),\s*(\d+),\s*(\d+)\s*\}/g)]
+    .map(match => ({ px: Number(match[1]), line_h: Number(match[2]), asc: Number(match[3]) }));
+  assert.deepEqual(faces, snapshot.fontFaces, 'Simulator native font sizes and metrics differ from SDK');
   assert.deepEqual([...api.imports.env].sort(), [...snapshot.imports].sort(), 'SDK import contract changed');
   const host = new Host({ manifest: { id: 'test.sdkcompat', permissions: [] }, assets: new Map() });
   try {
