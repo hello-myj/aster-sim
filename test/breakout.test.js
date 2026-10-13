@@ -1,4 +1,5 @@
 'use strict';
+require('../scripts/integration-inputs').requireIntegrationInputs();
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { Host } = require('../src/host');

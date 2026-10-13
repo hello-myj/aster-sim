@@ -1,4 +1,5 @@
 'use strict';
+require('../scripts/integration-inputs').requireIntegrationInputs();
 const test=require('node:test'),assert=require('node:assert/strict');
 const {Host}=require('../src/host'),{loadPackage}=require('../src/package');
 function setup(){

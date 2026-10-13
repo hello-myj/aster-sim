@@ -4,7 +4,9 @@ const { constants } = require('node:fs');
 const fail = code => { throw Object.assign(Error(code), { code }); };
 // A session-owned filesystem: nodes and open handles never touch host storage.
 class MemoryFS {
-  constructor() { this.constants = constants; this.nodes = new Map(); this.fds = new Map(); this.next = 1; }
+  constructor(limit = Infinity) { this.limit = limit; this.constants = constants; this.nodes = new Map(); this.fds = new Map(); this.next = 1; }
+  usedBytes() { return [...new Set([...this.nodes.values(), ...[...this.fds.values()].map(h=>h.node)])].reduce((n,x)=>n+(x.dir?0:x.data.length),0); }
+  reserve(n, bytes) { if(this.usedBytes() + bytes - (n?.data?.length || 0) > this.limit) fail('ENOSPC'); }
   key(p) { return path.resolve(p); }
   node(p) { const n = this.nodes.get(this.key(p)); if (!n) fail('ENOENT'); return n; }
   parent(p) { if (!this.node(path.dirname(this.key(p))).dir) fail('ENOTDIR'); }
@@ -37,13 +39,13 @@ class MemoryFS {
     const h = this.handle(fd), n = h.node;
     if ((h.flags & 3) === constants.O_RDONLY) fail('EBADF');
     if (position === null || h.flags & constants.O_APPEND) position = n.data.length;
-    if (position + length > n.data.length) { const next = Buffer.alloc(position + length); n.data.copy(next); n.data = next; }
+    if (position + length > n.data.length) { this.reserve(n,position+length); const next = Buffer.alloc(position + length); n.data.copy(next); n.data = next; }
     b.copy(n.data, position, offset, offset + length); return length;
   }
   readFileSync(p) { const n = this.node(p); if (n.dir) fail('EISDIR'); return Buffer.from(n.data); }
   writeFileSync(p, data) {
     p = this.key(p); this.parent(p); if (this.nodes.get(p)?.dir) fail('EISDIR');
-    const n = this.nodes.get(p) || { dir: false }; n.data = Buffer.from(data); this.nodes.set(p, n);
+    const n = this.nodes.get(p) || { dir: false }; this.reserve(n,Buffer.byteLength(data)); n.data = Buffer.from(data); this.nodes.set(p, n);
   }
   renameSync(from, to) { const n = this.node(from); this.parent(to); this.nodes.set(this.key(to), n); this.nodes.delete(this.key(from)); }
   unlinkSync(p) { if (this.node(p).dir) fail('EISDIR'); this.nodes.delete(this.key(p)); }

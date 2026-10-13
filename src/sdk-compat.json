@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "abi": "3.7.0",
-  "sdkCommit": "5e9c124dd03a0eb95bb30159befb9235919f0760",
+  "sdkCommit": "b7b90704bed332e9177119ef847279297557619e",
   "imports": [
     "__cxa_allocate_exception",
     "__cxa_begin_catch",

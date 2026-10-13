@@ -1,0 +1,47 @@
+name: Simulator and pinned SDK
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: aster-sim
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.20.0'
+          cache: npm
+          cache-dependency-path: aster-sim/package-lock.json
+      - id: sdk
+        run: |
+          node - <<'JS'
+          const fs = require('node:fs');
+          const revision = require('./aster-sim/src/sdk-compat.json').sdkCommit;
+          if (!/^[0-9a-f]{40}$/.test(revision)) throw Error('SDK revision must be a full commit hash');
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, 'revision=' + revision + '\n');
+          JS
+      - uses: actions/checkout@v4
+        with:
+          repository: hello-myj/aster-sdk
+          ref: ${{ steps.sdk.outputs.revision }}
+          path: aster-sdk
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r aster-sdk/requirements.txt
+      - run: npm ci --prefix aster-sim
+      - run: node aster-sim/scripts/check-sdk.js aster-sdk
+      - run: python aster-sdk/tools/build.py aster-sdk/apps/game.2048 aster-sdk/apps/imucube --target xtensa --aot
+      - name: Execute pinned SDK examples and unit tests
+        working-directory: aster-sim
+        env:
+          ASTER_SIM_2048_AST: ${{ github.workspace }}/aster-sdk/dist/xtensa/aster.game.2048.ast
+          ASTER_SIM_IMUCUBE_AST: ${{ github.workspace }}/aster-sdk/dist/xtensa/aster.imucube.ast
+        run: npm test
+      - uses: actions/upload-artifact@v4
+        with:
+          name: simulator-sdk-inputs
+          path: aster-sdk/dist/xtensa/*.ast
+          if-no-files-found: error

@@ -1,4 +1,5 @@
 'use strict';
+require('../scripts/integration-inputs').requireIntegrationInputs();
 const test = require('node:test'), assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os');
 const AsterAudioPlayer = require('../web/audio');

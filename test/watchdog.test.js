@@ -17,6 +17,7 @@ test('blocked WASM event is killed without freezing the CLI', t => {
   section(7, exports); section(10, [2,4,0,0x41,0,0x0b,7,0,0x03,0x40,0x0c,0,0x0b,0x0b]);
   const wasm = Buffer.from(bytes); assert.equal(WebAssembly.validate(wasm), true);
   const file = path.join(root, 'blocked.wasm'); fs.writeFileSync(file, wasm);
-  const run = spawnSync(process.execPath, [path.join(__dirname, '../src/cli.js'), file, '--headless', '--watchdog', '1', '--state', path.join(root, 'state')], { timeout: 6000, encoding: 'utf8' });
+  const run = spawnSync(process.execPath, [path.join(__dirname, '../src/cli.js'), file, '--headless', '--watchdog', '1', '--diagnostics', path.join(root,'report.json'), '--state', path.join(root, 'state')], { timeout: 6000, encoding: 'utf8' });
   assert.equal(run.status, 1, run.stderr); assert.match(run.stderr, /WASM callback blocked/);
+  const report=JSON.parse(fs.readFileSync(path.join(root,'report.json')));assert.equal(report.diagnostics.phase,'aster_app_event');assert.ok(report.diagnostics.appId);assert.equal(report.code,1);
 });

@@ -134,3 +134,11 @@ SDK 更新后先运行 `check-sdk`。它检查真实契约文件与 lock 校验�
 本次验证：Linux Node 20 与 Windows 原生 Node 24 下均完成 37 项测试，全部通过，包含外部 SDK 2048、IMU 及打砖块包。打砖块集成测试覆盖 240×320、320×480、480×800 原生画布、拖动球拍、发球与暂停；Windows 下两种开发板尺寸的截图已核查；新版便携 EXE 在 480×800 下运行打砖块 60 帧正常退出。霓虹对决使用新 xtensa 路径构建，Windows 本地磁盘运行 60 帧正常。未以此代替真机外设或 GUI 手动测试。
 
 本次更新保持 WASM 执行策略：设备包中的 Xtensa AOT 仍被忽略，纯 WASM 包也可运行。固件的 SD 字形缓存和 PSRAM 生命周期属于硬件实现，模拟器使用主机字体服务，不把主机缓存占用当作设备 PSRAM 测量结果。
+
+## 候选发布集成
+
+完整发布由固件 `tools/release_check.py` 读取 `contract/release-matrix.json`，固定 SDK/模拟器提交和工具链，再构建 2048、IMU 与打砖块必需包并运行全部测试。缺包即失败；`ASTER_SIM_REQUIRE_PACKAGES=1` 也令模拟器测试拒绝缺失输入。普通 `npm test` 没有外部包时的 skip 仅用于单元测试，不能当作发布通过。入口与验收范围见 [发布验证](https://github.com/hello-myj/aster-firmware/blob/main/docs/release-validation.md)。
+
+## 回放与诊断
+
+`node src/cli.js APP.ast --replay scenario.json --diagnostics report.json --screenshot final.png` 使用固定时钟、种子和输入；支持无空间、分配失败及缺少能力场景。网页同时显示 APP、Trap、内存、句柄、ABI 调用数和帧处理耗时。格式、可复现条件及与真机的边界见 [回放与故障诊断](docs/replay.md)。

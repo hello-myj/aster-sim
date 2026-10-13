@@ -1,5 +1,7 @@
 'use strict';
 const fs = require('node:fs');
+const crypto = require('node:crypto');
+const { FEATURES } = require('./replay');
 const path = require('node:path');
 const { performance } = require('node:perf_hooks');
 const { createCanvas, textFont, decodeImage, to565, from565, execGraphics } = require('./graphics');
@@ -24,6 +26,7 @@ class Host {
     this.pkg = pkg; this.options = options; this.manifest = pkg.manifest;
     this.width = options.width || 240; this.height = options.height || 320;
     if (this.manifest.orientation === 'landscape' && this.width < this.height || this.manifest.orientation === 'portrait' && this.width > this.height) [this.width, this.height] = [this.height, this.width];
+    this.metrics={abiCalls:{},allocationAttempts:0,guestPeakBytes:0,hostAllocationPeakBytes:0,handlePeak:0,frameMs:[],frameSamples:0,frameTotalMs:0,frameMaxMs:0}; this.phase='load';
     this.handles = new Map(); this.nextHandle = 1; this.freeBlocks = []; this.allocations = new Map();
     this.permissions = new Set(this.manifest.permissions || []);
     this.fps = 30; this.frame = 0; this.boot = performance.now(); this.exitCode = null; this.paused = false; this.stopped = false;
@@ -35,9 +38,10 @@ class Host {
     if (options.camera) { this.camera = decodeImage(fs.readFileSync(options.camera), 320, 240).canvas; this.features.add(4); }
     if (options.pcmInput) { this.pcmInput = fs.readFileSync(options.pcmInput); this.features.add(5); }
     if (!options.noAudio) this.features.add(6);
-    this.volume = 70; this.audio = { state: 0, total: 0, bytes: 0, position: 0, started: performance.now() };
+    for(const name of options.missingFeatures||[])this.features.delete(FEATURES[name]);
+    this.volume = 70; this.audio = { state: 0, total: 0, bytes: 0, position: 0, started: this.now() };
     this.wifi = { ssid: '', state: 0, last: 0, saved: '' };
-    this.storageFs = options.state ? fs : (options.memoryStorage || new MemoryFS());
+    this.storageFs = options.state ? fs : (options.memoryStorage || new MemoryFS(options.storageBytes));
     this.root = path.resolve(options.state || path.join(__dirname, '../memory-session'), this.manifest.id);
     for (const x of ['data', 'cache', 'kv']) this.storageFs.mkdirSync(path.join(this.root, x), { recursive: true });
     this.shared = path.resolve(options.state || path.join(__dirname, '../memory-session'), 'shared');
@@ -47,9 +51,9 @@ class Host {
     this.screen = createCanvas(this.width, this.height); this.presentCount = 0;
     this.send = options.send || (() => {});
     const names = { display: 0, touch: 1, mouse: 2, keyboard: 3, camera: 4, 'audio-in': 5, 'audio-out': 6, wifi: 7, bluetooth: 8, accelerometer: 9, gyroscope: 10, filesystem: 11, rtc: 12, psram: 13, framebuffer: 14 };
-    for (const feature of this.manifest.requires || []) if (feature !== 'storage.app' && !this.features.has(names[feature])) throw Error(`Required capability unavailable: ${feature}`);
+    for (const feature of this.manifest.requires || []) if (!this.features.has(FEATURES[feature])) throw Error(`Required capability unavailable: ${feature}`);
   }
-  now() { return Math.floor(performance.now() - this.boot); }
+  now() { return this.options.clock ? this.options.clock() : Math.floor(performance.now() - this.boot); }
   buffer() { return Buffer.from(this.memory.buffer); }
   range(p, n) { return Number.isInteger(p) && Number.isInteger(n) && (p >>> 0) + (n >>> 0) <= this.memory.buffer.byteLength && n >= 0; }
   bytes(p, n) { if (!this.range(p, n)) throw Object.assign(Error('WASM memory bounds'), { code: 'EINVAL' }); return this.buffer().subarray(p >>> 0, (p >>> 0) + n); }
@@ -58,17 +62,18 @@ class Host {
   cstring(p) { const b = this.buffer(); p >>>= 0; if (p >= b.length) throw Error('Invalid string'); const end = b.indexOf(0, p); if (end < 0) throw Error('Unterminated string'); return b.toString('utf8', p, end); }
   output(p, text, cap, nul = false) { const b = Buffer.from(text); if (b.length + (nul ? 1 : 0) > cap) return -11; this.bytes(p, cap); b.copy(this.buffer(), p); if (nul) this.buffer()[p + b.length] = 0; return b.length; }
   struct(p, cap, size, version = 1) { if (cap < size || !this.range(p, size) || this.u32(p) < size || this.u32(p + 4) !== version) return false; this.bytes(p, size).fill(0); this.u32(p, size); this.u32(p + 4, version); return true; }
-  add(kind, value, type = 0) { const h = (type | this.nextHandle++) >>> 0; this.handles.set(h, { kind, ...value }); return h; }
+  add(kind, value, type = 0) { const h = (type | this.nextHandle++) >>> 0; this.handles.set(h, { kind, ...value }); this.metrics.handlePeak=Math.max(this.metrics.handlePeak,this.handles.size); return h; }
   get(h, kind) { const v = this.handles.get(h >>> 0); if (!v || v.kind !== kind) throw Object.assign(Error('Bad handle'), { code: 'EBADF' }); return v; }
   alloc(n) {
+    if (++this.metrics.allocationAttempts===this.options.allocationFailAt) return 0;
     if (n < 0 || n > this.maxLinear) return 0;
     n = Math.ceil(Math.max(n, 1) / 16) * 16;
     const i = this.freeBlocks.findIndex(x => x.n >= n);
-    if (i >= 0) { const block = this.freeBlocks.splice(i, 1)[0]; if (block.n > n) this.freeBlocks.push({ p: block.p + n, n: block.n - n }); this.allocations.set(block.p, n); return block.p; }
+    if (i >= 0) { const block = this.freeBlocks.splice(i, 1)[0]; if (block.n > n) this.freeBlocks.push({ p: block.p + n, n: block.n - n }); this.allocations.set(block.p, n); this.trackMemory(); return block.p; }
     const p = this.heap, end = p + n;
     if (end > Math.min(this.manifest.memory?.max || this.maxLinear, this.maxLinear)) return 0;
     if (end > this.memory.buffer.byteLength) { try { this.memory.grow(Math.ceil((end - this.memory.buffer.byteLength) / 65536)); } catch { return 0; } }
-    this.heap = end; this.allocations.set(p, n); return p;
+    this.heap = end; this.allocations.set(p, n); this.trackMemory(); return p;
   }
   free(p) { const n = this.allocations.get(p); if (n) { this.allocations.delete(p); this.freeBlocks.push({ p, n }); this.freeBlocks.sort((a, b) => a.p - b.p); for (let i = 0; i < this.freeBlocks.length - 1;) { const a = this.freeBlocks[i], b = this.freeBlocks[i + 1]; if (a.p + a.n === b.p) { a.n += b.n; this.freeBlocks.splice(i + 1, 1); } else i++; } } }
   permission(p) { if (!this.permissions.has(p)) throw Object.assign(Error('Permission denied'), { code: 'EPERM' }); }
@@ -118,7 +123,7 @@ class Host {
       aster_app_set_framerate: fps => { this.fps = Math.min(fps >>> 0 || 30, 60); return 0; },
       aster_time_now_ms: () => this.now() >>> 0,
       aster_log: (level, p, n) => this.log(level, this.string(p, n)),
-      aster_display_count: () => 1,
+      aster_display_count: () => this.features.has(0) ? 1 : 0,
       aster_display_get_info: (i, p, n) => {
         if (i) return -6; if (!this.struct(p, n, 56)) return -1;
         [this.width, this.height, 9600, 0x1002].forEach((v, j) => this.u32(p + 8 + j * 4, v));
@@ -189,8 +194,8 @@ class Host {
       aster_cam_read: (p, n) => { if (!this.camera) return -16; const b = to565(this.camera); if (n < b.length) return -11; this.bytes(p, b.length).set(b); return 0; },
       aster_time_get: (p, n) => {
         if (!this.struct(p, n, 56)) return -1;
-        const d = new Date(); this.bytes(p + 8, 8).writeBigUInt64LE(BigInt(d.getTime())); this.u32(p + 16, 1);
-        [d.getFullYear(), d.getMonth() + 1, d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds(), d.getDay()].forEach((v, i) => this.u32(p + 20 + i * 4, v)); return 0;
+        const d = new Date(this.options.clock ? (this.options.epochMs ?? 1767225600000) + this.now() : Date.now()); this.bytes(p + 8, 8).writeBigUInt64LE(BigInt(d.getTime())); this.u32(p + 16, 1);
+        (this.options.clock ? [d.getUTCFullYear(), d.getUTCMonth()+1, d.getUTCDate(), d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds(), d.getUTCDay()] : [d.getFullYear(), d.getMonth() + 1, d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds(), d.getDay()]).forEach((v, i) => this.u32(p + 20 + i * 4, v)); return 0;
       },
     };
     Object.assign(a, this.storageImports(), this.audioImports(), this.wifiImports(), this.libcImports());
@@ -205,7 +210,7 @@ class Host {
     a.aster_appmgr_uninstall = (p, n) => { this.permission('appmgr'); const id = this.string(p, n); if (id === this.manifest.id) return -5; const list = this.options.catalog || [], i = list.findIndex(a => a.manifest.id === id); if (i < 0) return -6; list.splice(i, 1); return 0; };
     this.apiNames = Object.keys(a).filter(x => x.startsWith('aster_'));
     const wrapped = {};
-    for (const [name, fn] of Object.entries(a)) wrapped[name] = (...args) => { try { return fn(...args); } catch (e) { if (e instanceof WebAssembly.RuntimeError) throw e; if (e.code === 'EINVAL' || e instanceof RangeError) return -1; this.log(2, `${name}: ${e.message}`); return errno(e); } };
+    for (const [name, fn] of Object.entries(a)) wrapped[name] = (...args) => { this.metrics.abiCalls[name]=(this.metrics.abiCalls[name]||0)+1; const bit=name.startsWith('aster_gfx_')||name.startsWith('aster_surface_')||name==='aster_display_get_info'?0:name==='aster_input_touch'?1:name==='aster_input_keys_state'?3:name.startsWith('aster_cam_')?4:name==='aster_accel_read'?9:name==='aster_gyro_read'?10:name.startsWith('aster_fs_')||name.startsWith('aster_kv_')?11:name==='aster_time_get'?12:null; if(bit!==null&&!this.features.has(bit))return -16; try { return fn(...args); } catch (e) { if (e instanceof WebAssembly.RuntimeError) throw e; if (e.code === 'EINVAL' || e instanceof RangeError) return -1; this.log(2, `${name}: ${e.message}`); return errno(e); } };
     return wrapped;
   }
   imuRead(p, n, info) {
@@ -246,7 +251,19 @@ class Host {
     const rc = this.call('aster_app_init'); if (rc < 0) { this.stop(); throw Error(`aster_app_init failed: ${rc}`); }
     if (this.exitCode === null) this.call('aster_app_start'); return this;
   }
-  call(name, ...args) { return this.instance?.exports[name]?.(...args); }
+  trackMemory(){this.metrics.guestPeakBytes=Math.max(this.metrics.guestPeakBytes,this.memory?.buffer.byteLength||0);this.metrics.hostAllocationPeakBytes=Math.max(this.metrics.hostAllocationPeakBytes,[...this.allocations.values()].reduce((a,b)=>a+b,0));}
+  diagnostics(){
+    this.trackMemory();const sorted=[...this.metrics.frameMs].sort((a,b)=>a-b),kinds={};for(const h of this.handles.values())kinds[h.kind]=(kinds[h.kind]||0)+1;
+    return {appId:this.manifest.id,appVersion:this.manifest.version,abiTarget:this.manifest.abi?.target,phase:this.phase,trap:this.lastTrap||null,frame:this.frame,paused:this.paused,virtualMs:this.now(),presents:this.presentCount,guestBytes:this.memory?.buffer.byteLength||0,guestPeakBytes:this.metrics.guestPeakBytes,hostAllocatedBytes:[...this.allocations.values()].reduce((a,b)=>a+b,0),hostAllocationPeakBytes:this.metrics.hostAllocationPeakBytes,handles:kinds,handlePeak:this.metrics.handlePeak,abiCalls:{...this.metrics.abiCalls},frameTiming:{samples:this.metrics.frameSamples,meanMs:this.metrics.frameSamples?this.metrics.frameTotalMs/this.metrics.frameSamples:0,maxMs:this.metrics.frameMaxMs,p95RecentMs:sorted.length?sorted[Math.ceil(sorted.length*.95)-1]:0,recentSamples:sorted.length}};
+  }
+  stateDigest(){
+    const storage=this.storageFs instanceof MemoryFS?[...this.storageFs.nodes].filter(([,n])=>!n.dir).map(([p,n])=>[path.relative(path.dirname(this.shared),p),crypto.createHash('sha256').update(n.data).digest('hex')]).sort((a,b)=>a[0]<b[0]?-1:1):null;
+    return {memorySha256:this.memory?crypto.createHash('sha256').update(this.buffer()).digest('hex'):null,pixelSha256:crypto.createHash('sha256').update(this.screen.toBuffer('image/png')).digest('hex'),storage,frame:this.frame,presents:this.presentCount,exitCode:this.exitCode,paused:this.paused,virtualMs:this.now()};
+  }
+  call(name, ...args) {
+    this.phase=name;this.send({type:'phase',diagnostics:{appId:this.manifest.id,phase:name,frame:this.frame,guestBytes:this.memory?.buffer.byteLength||0}});
+    try{return this.instance?.exports[name]?.(...args);}catch(e){this.lastTrap={phase:name,message:e.message};throw e;}finally{this.trackMemory();}
+  }
   event(type, payload = []) {
     if (this.exitCode !== null || this.paused) return;
     const p = this.eventPtr; this.bytes(p, 56).fill(0); this.u32(p, 56); this.u32(p + 4, 1); this.u32(p + 8, type); this.bytes(p + 16, 8).writeBigUInt64LE(BigInt(this.now())); payload.forEach((v, i) => this.u32(p + 24 + i * 4, v)); this.call('aster_app_event', p);
@@ -257,7 +274,8 @@ class Host {
       if (t.repeat) t.due = this.now() + t.period; else this.handles.delete(id);
       this.event(3, [id, t.user]); if (this.exitCode !== null) return;
     }
-    this.event(1, [this.frame++]);
+    const started=performance.now();
+    try{this.event(1, [this.frame++]);}finally{const ms=performance.now()-started;this.metrics.frameSamples++;this.metrics.frameTotalMs+=ms;this.metrics.frameMaxMs=Math.max(this.metrics.frameMaxMs,ms);this.metrics.frameMs.push(ms);if(this.metrics.frameMs.length>512)this.metrics.frameMs.shift();}
   }
   input(msg) {
     if (msg.type === 'audio-feedback') { this.audioFeedback(msg); return; }

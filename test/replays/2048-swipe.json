@@ -1,0 +1,1 @@
+{"version":1,"frames":24,"step_ms":34,"seed":2048,"epoch_ms":1767225600000,"events":[{"frame":2,"type":"touch","x":70,"y":180,"action":1},{"frame":3,"type":"touch","x":180,"y":180,"action":2},{"frame":4,"type":"touch","x":180,"y":180,"action":3},{"frame":8,"type":"pause","paused":true},{"frame":10,"type":"pause","paused":false}]}

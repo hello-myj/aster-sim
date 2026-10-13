@@ -30,7 +30,7 @@ function Copy-Changed([string]$Source, [string]$Target) {
 }
 New-Item -ItemType Directory -Path $dest,(Join-Path $dest 'runtime') -Force | Out-Null
 # Portable output is simulator-only. Prune stale output from older builds.
-$allowed = @('src','web','node_modules','runtime','aster-sim.exe','aster-sim.cmd','README.md','LICENSE')
+$allowed = @('src','web','docs','package.json','package-lock.json','node_modules','runtime','aster-sim.exe','aster-sim.cmd','README.md','LICENSE')
 $resolvedDest = [IO.Path]::GetFullPath($dest).TrimEnd([IO.Path]::DirectorySeparatorChar)
 foreach ($entry in (Get-ChildItem -LiteralPath $dest -Force)) {
   if ($allowed -notcontains $entry.Name) {
@@ -40,8 +40,8 @@ foreach ($entry in (Get-ChildItem -LiteralPath $dest -Force)) {
   }
 }
 
-foreach ($item in @('src','web','node_modules')) { Copy-Changed (Join-Path $simRoot $item) (Join-Path $dest $item) }
-foreach ($item in @('aster-sim.cmd','README.md','LICENSE')) { Copy-Changed (Join-Path $simRoot $item) (Join-Path $dest $item) }
+foreach ($item in @('src','web','docs','node_modules')) { Copy-Changed (Join-Path $simRoot $item) (Join-Path $dest $item) }
+foreach ($item in @('aster-sim.cmd','README.md','LICENSE','package.json','package-lock.json')) { Copy-Changed (Join-Path $simRoot $item) (Join-Path $dest $item) }
 Copy-Changed $Node (Join-Path $dest 'runtime/node.exe')
 Copy-Changed (Join-Path $PSScriptRoot 'NODE-LICENSE.txt') (Join-Path $dest 'runtime/LICENSE.txt')
 $launcherSource = Join-Path $PSScriptRoot 'launcher.cs'
