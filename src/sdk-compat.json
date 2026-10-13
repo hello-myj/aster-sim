@@ -140,7 +140,7 @@
     "include/aster/event.h": "bd636455b92a309158273ec38a3b17f2bbc159c5ef3ce30b123064d5bc5188af",
     "include/aster/font_metrics.h": "5c3cf725bf809ab6ac525087938d384e1a0bf72a4391e7c21625d68380392213",
     "include/aster/fs.h": "961140a1b1c4c63f77ded3358048a4525f87637a90dd5b9717372eaec4f6d635",
-    "include/aster/gfx.h": "44e929f8968b0fdc9e961459c2dc1d1cd94705adc9dbd722930b89f7b0fa007a",
+    "include/aster/gfx.h": "df174629dd9f729b4deeeafe9f65958eb5b89d6df8d217b6dfa04cbe38d687aa",
     "include/aster/icon.h": "f0b618d9ba2b4e2803a79a90482db4ed1127010cbeaaefc2c96ef36c25674751",
     "include/aster/img.h": "3d806c7d1511429d2f2702a7fdbebc2a32ec1383b29fc0bf656f2e974f5ea434",
     "include/aster/imu.h": "40ca455d12ea705559204cdfba732f242005ab36f12f9583a45a1dc9ca375c1f",

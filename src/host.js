@@ -152,14 +152,15 @@ class Host {
         if (used + (canvasFlags ? 0 : w * h * 2) > (this.manifest.memory?.heap || 262144)) return -2;
         this.u32(out, this.add('surface', { w, h, flags: granted, ptr: 0, canvas: createCanvas(w, h) }, 0x02000000)); return 0;
       },
-      aster_surface_destroy: h => { const s = this.get(h, 'surface'); if (s.ptr) this.free(s.ptr); this.handles.delete(h); return 0; },
+      aster_surface_destroy: h => { const s = this.get(h, 'surface'); if(this.gfxFrame?.s===s) this.gfxFrame=null; if (s.ptr) this.free(s.ptr); this.handles.delete(h); return 0; },
       aster_surface_acquire: (h, p, n) => {
         const s = this.get(h, 'surface'); if (!this.struct(p, n, 32)) return -1;
         if (!(s.flags & 1) && !s.ptr) { s.ptr = this.alloc(s.w * s.h * 2); if (!s.ptr) return -2; this.syncOut(s); }
         [s.ptr, s.w, s.h, s.w * 2, 0x1002, s.flags].forEach((v, i) => this.u32(p + 8 + i * 4, v)); return 0;
       },
-      aster_surface_present: h => this.present(this.get(h, 'surface')),
+      aster_surface_present: h => {if(this.gfxFrame){this.gfxFrame.error ||= -5;return this.gfxFrame.error;}return this.present(this.get(h, 'surface'));},
       aster_surface_flush: (h, p, x, y, w, hh, pitch) => {
+        if(this.gfxFrame){this.gfxFrame.error ||= -5;return this.gfxFrame.error;}
         const s = this.get(h, 'surface'); if (!w || !hh || x < 0 || y < 0 || x + w > s.w || y + hh > s.h || pitch < w) return -1;
         this.bytes(p, ((hh - 1) * pitch + w) * 2); this.syncIn(s);
         const temp = createCanvas(w, hh), b = Buffer.alloc(w * hh * 2);
@@ -284,8 +285,8 @@ class Host {
     if (msg.type === 'sensor') { for (const name of ['accel', 'gyro']) if (Array.isArray(msg[name]) && msg[name].length === 3 && msg[name].every(Number.isFinite)) this[name] = msg[name]; }
     if (msg.type === 'pause') { this.setPaused(!this.paused); }
   }
-  setPaused(pause) { if (this.exitCode !== null || pause === this.paused) return; if (pause) { this.call('aster_app_pause'); this.paused = true; this.pauseAt = this.now(); } else { const elapsed = this.now() - this.pauseAt; for (const t of this.handles.values()) if (t.kind === 'timer') t.due += elapsed; this.paused = false; this.call('aster_app_resume'); } this.keys.clear(); this.touch = null; }
-  stop() { if (this.stopped) return; this.stopped = true; try { this.call('aster_app_stop'); } finally { try { this.call('aster_app_destroy'); } finally { for (const h of this.handles.values()) if (h.kind === 'file' && h.fd !== undefined) this.storageFs.closeSync(h.fd); this.handles.clear(); this.send({ type: 'audio', op: 'stop' }); } } }
+  setPaused(pause) { if (this.exitCode !== null || pause === this.paused) return; if (pause) { this.gfxFrame=null;this.call('aster_app_pause'); this.paused = true; this.pauseAt = this.now(); } else { const elapsed = this.now() - this.pauseAt; for (const t of this.handles.values()) if (t.kind === 'timer') t.due += elapsed; this.paused = false; this.call('aster_app_resume'); } this.keys.clear(); this.touch = null; }
+  stop() { if (this.stopped) return; this.stopped = true;this.gfxFrame=null; try { this.call('aster_app_stop'); } finally { try { this.call('aster_app_destroy'); } finally { for (const h of this.handles.values()) if (h.kind === 'file' && h.fd !== undefined) this.storageFs.closeSync(h.fd); this.handles.clear(); this.send({ type: 'audio', op: 'stop' }); } } }
 }
 Object.assign(Host.prototype, require('./storage'), require('./libc'), require('./peripherals'));
 module.exports = { Host, E, errno };
