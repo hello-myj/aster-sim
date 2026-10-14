@@ -142,3 +142,19 @@ SDK 更新后先运行 `check-sdk`。它检查真实契约文件与 lock 校验�
 ## 回放与诊断
 
 `node src/cli.js APP.ast --replay scenario.json --diagnostics report.json --screenshot final.png` 使用固定时钟、种子和输入；支持无空间、分配失败及缺少能力场景。网页同时显示 APP、Trap、内存、句柄、ABI 调用数和帧处理耗时。格式、可复现条件及与真机的边界见 [回放与故障诊断](docs/replay.md)。
+
+
+## G7 Scene 辅助层
+
+当前工作区支持帧事务的可选 CLIP 和 FONT_EPOCH 能力，沿用 ABI 3.7 imports。Scene、布局、按钮和滚动状态由 SDK 的 APP C 库管理；模拟器只实现事务裁剪。模拟器字体常驻，epoch 默认0；异步字体完成的回归由固件/SDK测试覆盖。旧普通 surface 的零尺寸请求现在按契约采用实际 APP 空间，与固件一致。
+
+构建 SDK 的 `apps/scene-settings`、`apps/scene-sprites` 后，可在 PowerShell 执行真实 WASM 集成测试（240×320 和 320×480）：
+
+```powershell
+$env:ASTER_SIM_SCENE_SETTINGS_AST = 'E:\path\to\aster.scene.settings.ast'
+$env:ASTER_SIM_SCENE_SPRITES_AST = 'E:\path\to\aster.scene.sprites.ast'
+$env:ASTER_SIM_REQUIRE_SCENE_PACKAGES = '1'
+npm test
+```
+
+此标志保证缺包时报错，不能把跳过当通过。检查静态页零重复发布、按钮点击/滚动防误触、多精灵超过240次更新的重建、暂停恢复。具体 APP API 见配套 SDK 手册第13节。本轮代码尚未发布；`src/sdk-compat.json` 已固定到包含 G7 的 SDK 提交，CI 构建两个 Scene 示例并强制执行相关集成测试，不能仅依据相同 ABI 号宣称配套。远端固定版本 CI 需在相关提交推送后执行。

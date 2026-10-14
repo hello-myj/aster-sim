@@ -9,7 +9,7 @@ function fixture(flags=0){
  s.canvas.getContext('2d').fillStyle='red';s.canvas.getContext('2d').fillRect(0,0,4,4);host.syncOut(s);host.present(s);
  const api=host.imports();
  function control(action,id=0){[24,1,action,id,0,0].forEach((v,i)=>host.u32(128+i*4,v));return api.aster_gfx_exec(h,0,-1,128,24,MAGIC,1,0,0);}
- function begin(){assert.equal(control(0),0);assert.equal(host.u32(144),1);assert.equal(control(1),0);return host.u32(140);}
+ function begin(){assert.equal(control(0),0);assert.equal(host.u32(144)&1,1);assert.equal(control(1),0);return host.u32(140);}
  function draw(id,op=0){[op,0x07e0,0,0,0,0].forEach((v,i)=>host.u32(256+i*4,v));return api.aster_gfx_exec(h,256,1,0,0,id,MAGIC,0,0);}
  return {host,api,h,s,control,begin,draw,time:t=>now=t,pixel:()=>host.screen.getContext('2d').getImageData(0,0,1,1).data.slice(0,3)};
 }
@@ -45,4 +45,20 @@ test('unaligned command arrays are rejected before private rasterization',()=>{
  assert.equal(f.api.aster_gfx_exec(f.h,257,1,0,0,id,MAGIC,0,0),-1);
  assert.equal(f.control(2,id),-1);assert.equal(f.host.presentCount,1);
  assert.equal(f.host.bytes(8192,2).readUInt16LE(),0xf800);
+});
+
+test('optional frame clip is private, bounded, reset on begin, and QUERY epoch survives draws',()=>{
+ const f=fixture();f.host.fontEpoch=37;assert.equal(f.control(0),0);assert.equal(f.host.u32(144),7);assert.equal(f.host.u32(140),37);
+ const id=f.begin();
+ function clip(x,y,w,h){[32,1,4,id,x,y,w,h].forEach((v,i)=>f.host.u32(128+i*4,v));return f.api.aster_gfx_exec(f.h,0,-1,128,32,MAGIC,1,0,0);}
+ assert.equal(clip(1,1,2,2),0);
+ [1,0,(4<<16)|4,0x001f,0,0].forEach((v,i)=>f.host.u32(256+i*4,v));
+ assert.equal(f.api.aster_gfx_exec(f.h,256,1,0,0,id,MAGIC,0,0),1);assert.equal(f.host.presentCount,1);
+ assert.equal(f.control(2,id),0);
+ const px=f.s.canvas.getContext('2d').getImageData(0,0,4,4).data;
+ for(let y=0;y<4;y++)for(let x=0;x<4;x++)assert.deepEqual([...px.slice((y*4+x)*4,(y*4+x)*4+3)],x>=1&&x<3&&y>=1&&y<3?[0,0,255]:[255,0,0]);
+ assert.equal(f.control(0),0);assert.equal(f.host.u32(140),37);
+ const next=f.begin();assert.deepEqual(f.host.gfxFrame.clip,[0,0,4,4]);
+ [32,1,4,next,0xffffffff,0,2,2].forEach((v,i)=>f.host.u32(128+i*4,v));
+ assert.equal(f.api.aster_gfx_exec(f.h,0,-1,128,32,MAGIC,1,0,0),-1);assert.equal(f.control(2,next),-1);
 });

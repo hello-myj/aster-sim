@@ -63,11 +63,23 @@ function frameFail(host, error) {
  return host.gfxFrame ? host.gfxFrame.error : error;
 }
 function frameControl(host,s,arena,len) {
- if(!arena||(arena&3)||len!==24||!host.range(arena,24)) return -1;
+ if(!arena||(arena&3)||![24,32].includes(len)||!host.range(arena,len)) return -1;
+ if(len===32) {
+  const v=Array.from({length:8},(_,i)=>host.u32(arena+i*4));
+  if(v[0]!==32||v[1]!==1||v[2]!==4) return -1;
+  const f=host.gfxFrame;if(!f) return -12;
+  if(f.error) return f.error;
+  if(host.now()>=f.deadline) return frameFail(host,-8);
+  if(f.s!==s||f.id!==v[3]) return frameFail(host,-12);
+  const [,,,,x,y,w,h]=v;
+  if(!w||!h||x>s.w||w>s.w-x||y>s.h||h>s.h-y) return frameFail(host,-1);
+  if(!f.initialized&&(x||y||w!==s.w||h!==s.h)) return frameFail(host,-12);
+  f.clip=[x,y,w,h];return 0;
+ }
  const v=Array.from({length:6},(_,i)=>host.u32(arena+i*4));
  if(v[0]!==24||v[1]!==1||v[4]||v[5]) return -1;
  const [,,action,id]=v;
- if(action===0) {if(id)return -1;host.u32(arena+16,1);return 0;}
+ if(action===0) {if(id)return -1;host.u32(arena+16,7);host.u32(arena+12,host.fontEpoch||0);return 0;}
  if(action===1) {
   if(id) return -1;
   if(host.gfxFrame||host.paused) return -5;
@@ -77,7 +89,7 @@ function frameControl(host,s,arena,len) {
   const draft={...s,ptr:0,canvas:createCanvas(s.w,s.h)};
   if(!(s.flags&1)) draft.canvas.getContext('2d').drawImage(s.canvas,0,0);
   host.gfxFrame={s,draft,id:host.gfxFrameSequence=(host.gfxFrameSequence||0)+1,
-   deadline:host.now()+FRAME_TIMEOUT,error:0,batches:0,commands:0,arena:0,initialized:!(s.flags&1)};
+   clip:[0,0,s.w,s.h],deadline:host.now()+FRAME_TIMEOUT,error:0,batches:0,commands:0,arena:0,initialized:!(s.flags&1)};
   host.u32(arena+12,host.gfxFrame.id);return 0;
  }
  const f=host.gfxFrame;
@@ -125,7 +137,8 @@ function execGraphics(host, s, ptr, n, arena, arenaLen, px, py, pw, ph) {
   }
   if(!f) host.syncIn(s);
   const c = s.canvas.getContext('2d');
-  const clipped = pw && ph && !(s.flags & 1) && !commands.some(w => (w[0] & 255) === 0);
+  if(f) [px,py,pw,ph]=f.clip;
+  const clipped = !!f || (pw && ph && !(s.flags & 1) && !commands.some(w => (w[0] & 255) === 0));
   if (clipped) { c.save(); c.beginPath(); c.rect(px, py, pw, ph); c.clip(); }
   try {
   for (let i = 0; i < n; i++) {

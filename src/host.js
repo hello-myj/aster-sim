@@ -141,7 +141,7 @@ class Host {
         if ((flags & 1) && (flags & 2)) return -1;
         let w = this.u32(p + 8), h = this.u32(p + 12);
         if (flags & 2) { if (!w || !h) return -1; }
-        else { w = w || ((flags & 1) ? this.width : 0); h = h || ((flags & 1) ? this.height : 0); }
+        else { w = w || this.width; h = h || this.height; }
         if (fmt !== 0x1002 && fmt !== 0xffff) return -3; if (!w || !h || w > 4096 || h > 4096 || flags & ~3) return -1;
         this.bytes(out, 4);
         // Full-panel canvases live in platform memory, as in firmware.

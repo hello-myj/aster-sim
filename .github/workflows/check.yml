@@ -33,12 +33,15 @@ jobs:
       - run: pip install -r aster-sdk/requirements.txt
       - run: npm ci --prefix aster-sim
       - run: node aster-sim/scripts/check-sdk.js aster-sdk
-      - run: python aster-sdk/tools/build.py aster-sdk/apps/game.2048 aster-sdk/apps/imucube --target xtensa --aot
+      - run: python aster-sdk/tools/build.py aster-sdk/apps/game.2048 aster-sdk/apps/imucube aster-sdk/apps/scene-settings aster-sdk/apps/scene-sprites --target xtensa --aot
       - name: Execute pinned SDK examples and unit tests
         working-directory: aster-sim
         env:
           ASTER_SIM_2048_AST: ${{ github.workspace }}/aster-sdk/dist/xtensa/aster.game.2048.ast
           ASTER_SIM_IMUCUBE_AST: ${{ github.workspace }}/aster-sdk/dist/xtensa/aster.imucube.ast
+          ASTER_SIM_SCENE_SETTINGS_AST: ${{ github.workspace }}/aster-sdk/dist/xtensa/aster.scene.settings.ast
+          ASTER_SIM_SCENE_SPRITES_AST: ${{ github.workspace }}/aster-sdk/dist/xtensa/aster.scene.sprites.ast
+          ASTER_SIM_REQUIRE_SCENE_PACKAGES: '1'
         run: npm test
       - uses: actions/upload-artifact@v4
         with:
