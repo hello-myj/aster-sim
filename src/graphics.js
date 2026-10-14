@@ -38,9 +38,16 @@ function decodeImage(bytes, cw, ch) {
   } else throw Error('Unsupported image (expected BMP/PNG/JPEG)');
   dimensions(decoded.width, decoded.height);
   const image = createCanvas(decoded.width, decoded.height), context = image.getContext('2d'), pixels = context.createImageData(decoded.width, decoded.height);
-  pixels.data.set(decoded.data); context.putImageData(pixels, 0, 0);
+  pixels.data.set(decoded.data);
+  // Device PNG decode composites independent alpha onto black before RGB565.
+  for(let i=0;i<pixels.data.length;i+=4) {
+    const alpha=pixels.data[i+3];
+    for(let channel=0;channel<3;channel++) pixels.data[i+channel]=Math.floor(pixels.data[i+channel]*alpha/255);
+    pixels.data[i+3]=255;
+  }
+  context.putImageData(pixels, 0, 0);
   const scale = Math.min(1, cw ? cw / image.width : 1, ch ? ch / image.height : 1);
-  const canvas = createCanvas(Math.max(1, Math.floor(image.width * scale)), Math.max(1, Math.floor(image.height * scale)));
+  const canvas = createCanvas(Math.max(1, Math.round(image.width * scale)), Math.max(1, Math.round(image.height * scale)));
   canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
   return { canvas, width: image.width, height: image.height };
 }
@@ -56,6 +63,35 @@ function from565(canvas, b) {
     img.data.set(rgb(b.readUInt16LE(i / 2)), i); img.data[i + 3] = 255;
   }
   c.putImageData(img, 0, 0);
+}
+// Match the firmware's native RGB565 coverage and exact nearest sampling.
+function blend565(destination, foreground, alpha) {
+  const channel = (shift, mask) => Math.floor((((destination >>> shift) & mask) * (255-alpha)
+    + ((foreground >>> shift) & mask) * alpha + 127) / 255);
+  return (channel(11,31)<<11) | (channel(5,63)<<5) | channel(0,31);
+}
+function drawBitmap565(context, image, x, y, scale, alpha, clip) {
+  const sw=image.canvas.width, sh=image.canvas.height;
+  const width=Math.floor(sw*scale/256), height=Math.floor(sh*scale/256);
+  if(scale<8 || !alpha || !width || !height) return;
+  alpha=Math.min(255,alpha);
+  const [cx,cy,cw,ch]=clip;
+  const x0=Math.max(x,cx,0), y0=Math.max(y,cy,0);
+  const x1=Math.min(x+width,cx+cw), y1=Math.min(y+height,cy+ch);
+  if(x0>=x1 || y0>=y1) return;
+  const source=image.pixels565 || (image.pixels565=to565(image.canvas));
+  const patch=context.getImageData(x0,y0,x1-x0,y1-y0), pixels=patch.data;
+  for(let ty=y0;ty<y1;ty++) for(let tx=x0;tx<x1;tx++) {
+    const sy=Math.floor((ty-y)*sh/height), sx=Math.floor((tx-x)*sw/width);
+    const foreground=source.readUInt16LE((sy*sw+sx)*2);
+    if(!foreground) continue; // Existing 0x0000 key, no independent image alpha.
+    const offset=((ty-y0)*(x1-x0)+tx-x0)*4;
+    const destination=((pixels[offset]>>3)<<11)|((pixels[offset+1]>>2)<<5)|(pixels[offset+2]>>3);
+    const result=alpha===255?foreground:blend565(destination,foreground,alpha);
+    pixels.set(rgb(result),offset);pixels[offset+3]=255;
+  }
+  // putImageData ignores Canvas clips, so the patch is explicitly intersected above.
+  context.putImageData(patch,x0,y0);
 }
 const FRAME_MAGIC=0x47465231, FRAME_TIMEOUT=1000;
 function frameFail(host, error) {
@@ -171,8 +207,8 @@ function execGraphics(host, s, ptr, n, arena, arenaLen, px, py, pw, ph) {
         const image = host.handles.get(w[2]); if (!image || image.kind !== 'bitmap') return frameFail(host,-10);
         const scale = [10, 12].includes(op) ? (w[4] & 4095) : 256;
         const alpha = [11, 12].includes(op) ? ((op === 12 ? w[5] : w[4]) & 511) : 255;
-        const width = Math.floor(image.canvas.width * scale / 256), height = Math.floor(image.canvas.height * scale / 256);
-        if (scale < 8 || !alpha || !width || !height) break;
+        drawBitmap565(c,image,x,y,scale,alpha,clipped?[px,py,pw,ph]:[0,0,s.w,s.h]);
+        break;
         const smoothing = c.imageSmoothingEnabled; c.imageSmoothingEnabled = false;
         c.globalAlpha = Math.min(255, alpha) / 255;
         c.drawImage(image.canvas, x, y, width, height);
@@ -186,4 +222,4 @@ function execGraphics(host, s, ptr, n, arena, arenaLen, px, py, pw, ph) {
   if (pw && ph) host.present(s);}
   return n;
 }
-module.exports = { createCanvas, fontFace, snap, textFont, decodeImage, to565, from565, execGraphics };
+module.exports = { createCanvas, fontFace, snap, textFont, decodeImage, to565, from565, execGraphics, blend565, drawBitmap565 };

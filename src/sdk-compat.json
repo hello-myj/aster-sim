@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "abi": "3.7.0",
-  "sdkCommit": "d944be2d8da4363bc8abf0cde35c7144dfef2598",
+  "sdkCommit": "f4978553f7087dea534ee580f50757b5f3470732",
   "imports": [
     "__cxa_allocate_exception",
     "__cxa_begin_catch",
@@ -140,7 +140,7 @@
     "include/aster/event.h": "bd636455b92a309158273ec38a3b17f2bbc159c5ef3ce30b123064d5bc5188af",
     "include/aster/font_metrics.h": "5c3cf725bf809ab6ac525087938d384e1a0bf72a4391e7c21625d68380392213",
     "include/aster/fs.h": "961140a1b1c4c63f77ded3358048a4525f87637a90dd5b9717372eaec4f6d635",
-    "include/aster/gfx.h": "cabd76fdfa5dc3c846816c8adb156b247b2a7630d4f3210acc6c58df84ad268d",
+    "include/aster/gfx.h": "69aa5731a349d63852127a35a6b98f9542be8bf6efdad1a8ad0f6f551d795549",
     "include/aster/icon.h": "f0b618d9ba2b4e2803a79a90482db4ed1127010cbeaaefc2c96ef36c25674751",
     "include/aster/img.h": "3d806c7d1511429d2f2702a7fdbebc2a32ec1383b29fc0bf656f2e974f5ea434",
     "include/aster/imu.h": "40ca455d12ea705559204cdfba732f242005ab36f12f9583a45a1dc9ca375c1f",
