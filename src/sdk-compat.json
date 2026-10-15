@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "abi": "3.7.0",
-  "sdkCommit": "f4978553f7087dea534ee580f50757b5f3470732",
+  "abi": "3.8.0",
+  "sdkCommit": "76c6445fd0f872cc478dc87585a31c9b58c4af0c",
   "imports": [
     "__cxa_allocate_exception",
     "__cxa_begin_catch",
@@ -62,6 +62,13 @@
     "aster_kv_get",
     "aster_kv_set",
     "aster_log",
+    "aster_network_cancel",
+    "aster_network_close",
+    "aster_network_get_info",
+    "aster_network_open",
+    "aster_network_recv",
+    "aster_network_send",
+    "aster_network_status",
     "aster_surface_acquire",
     "aster_surface_create",
     "aster_surface_destroy",
@@ -129,14 +136,14 @@
     "vsprintf"
   ],
   "contractHashes": {
-    "contract/api.json": "75198f31e131520a2da119664a2c960a2cf2eff556efe1506a72b13229435510",
+    "contract/api.json": "8e6326ca135ded681e73660c5931591a3658d1bac4729371fb3954a891f3d3c3",
     "include/aster/app.h": "9c067bce70ee9d969301975ec310b06c739d7f258136787a0039383ad1069ecf",
     "include/aster/appmgr.h": "77acde65e2cedad625c715e6e9c2814f604e2354a9e8a301e74def80072be64c",
-    "include/aster/aster.h": "a85484fd7b3ba5bf4d41d0bad55309b4fdeb6c227dca2035534f657b08c43d78",
+    "include/aster/aster.h": "aa432da0fdf5f21d5be8805e0bc87d7adb3ffe9744f9eb85c58ef583d09863ea",
     "include/aster/audio.h": "bf58a682a051a7e5630449ca534622da39cef9e6e6771806d240e67f08838f98",
     "include/aster/camera.h": "1f0f719f1de70331454fe9743e5c4a3f5d37605ecff660b7a7dc1dff1f82d194",
     "include/aster/display.h": "324f406354060434933ef7020abeb86960a7abbd671036dc4856a41133d05962",
-    "include/aster/error.h": "b5c4b5f3e005b34d7cf0199f557f98caed5b06f0ef94e227957b34a0ae5ed95f",
+    "include/aster/error.h": "02bf3c4cb4f2ff90f2b9aa7768c48d7af78764e5dbd0f12f643a25f7f2b93e4b",
     "include/aster/event.h": "bd636455b92a309158273ec38a3b17f2bbc159c5ef3ce30b123064d5bc5188af",
     "include/aster/font_metrics.h": "5c3cf725bf809ab6ac525087938d384e1a0bf72a4391e7c21625d68380392213",
     "include/aster/fs.h": "961140a1b1c4c63f77ded3358048a4525f87637a90dd5b9717372eaec4f6d635",
@@ -147,9 +154,10 @@
     "include/aster/input.h": "b2a02df1a512294824f51bbc7cc676b9ac915f45ebbe57775f1d5fcf3d9495c3",
     "include/aster/kv.h": "b3be1a979044d53f25920e5a62b8990281e81888ef0e5e354302bfb68935f2ba",
     "include/aster/log.h": "8c5a616cd2d98f4b635592c5d7142c1c810b029868ef39e0cf3f39ace1319e9f",
+    "include/aster/network.h": "fc7c4e2d59b2cae929381fc2f9507d15a786a09a1146bb9f0cb818689257685d",
     "include/aster/sensor.h": "5d8b2b6f211d1cb06d4e5378f0b083100ad48db40d068f6317ae61fb634aca72",
     "include/aster/surface.h": "8cd5d99b21da830c4945e652a2a5981dc844dcc0f06fa5af198dd144d21e54f8",
-    "include/aster/system.h": "c1b67c53ce62c91b9255af8d325e7efe60a5515b949dd3c7bf8e7f485f33fefa",
+    "include/aster/system.h": "4b57f4f4c9cbef578c19e1555102c8bc14b8fd60e2ae5e5949338ea44a24881e",
     "include/aster/time.h": "6f6832715655566df7be77cc878634eb27ce202872bdc656319a680a4ce3e9a9",
     "include/aster/timer.h": "24bc78986dc054fa1cb1af45dc890cf2a046487349bcc33ccb915f23db4aad6a",
     "include/aster/types.h": "0cb93a2d20fd26f58d568584de694aa559a085d239f177b0d14a332ee3764ce2",
@@ -206,5 +214,6 @@
       "line_h": 63,
       "asc": 51
     }
-  ]
+  ],
+  "sdkWorkingTree": true
 }

@@ -10,7 +10,7 @@ const { WebSocketServer, WebSocket } = require('ws');
 const compatibility = require('./sdk-compat.json');
 const { validateReplay } = require('./replay');
 const version = '0.2.0';
-const help = `aster-sim ${version} — Aster ABI 3.7 WASM APP simulator
+const help = `aster-sim ${version} — Aster ABI 3.8 WASM APP simulator
 Usage: aster-sim APP.ast [--resolution 240x320] [options]
   --width N --height N    Window size; manifest orientation applies. This is the glass.
   --scale N              Window display scale (default 2; APP pixels unchanged)
@@ -20,6 +20,7 @@ Usage: aster-sim APP.ast [--resolution 240x320] [options]
   --apps DIR             Additional .ast packages for appmgr switching
   --camera FILE          Image as virtual RGB565 camera (max 320x240)
   --pcm-input FILE       Raw 44100 Hz stereo S16LE recording fixture
+  --network              Enable real IPv4 TCP/UDP (permission net required)
   --wifi                 Enable simulated Wi-Fi station (no host network changes)
   --no-audio             Report audio-out unavailable
   --no-open              Serve GUI without automatically opening Edge
@@ -35,7 +36,7 @@ Only WASM is executed; any Xtensa AOT payload in .ast is ignored.
 `;
 function parse(argv) {
   const opts = { width: 240, height: 320, scale: 2, port: 0, watchdog: 10, files: [] };
-  const booleans = { '--headless': 'headless', '--no-open': 'noOpen', '--no-audio': 'noAudio', '--wifi': 'wifi' };
+  const booleans = { '--headless': 'headless', '--no-open': 'noOpen', '--no-audio': 'noAudio', '--wifi': 'wifi', '--network': 'network' };
   const values = { '--width': 'width', '--height': 'height', '--scale': 'scale', '--port': 'port', '--frames': 'frames', '--watchdog': 'watchdog', '--state': 'state', '--apps': 'apps', '--camera': 'camera', '--pcm-input': 'pcmInput', '--screenshot': 'screenshot', '--manifest': 'manifest', '--pubkey': 'pubkey', '--replay': 'replayFile', '--diagnostics': 'diagnosticsFile' };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]; if (arg === '--version') return { version: true };
@@ -66,7 +67,7 @@ function openWindow(url, opts) {
 async function main(opts) {
   if(opts.diagnosticsFile)fs.mkdirSync(path.dirname(opts.diagnosticsFile),{recursive:true});
   const hash=file=>crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
-  const provenance={simulator:version,sdk:compatibility.sdkCommit,abi:compatibility.abi,nodeVersion:process.version,platform:process.platform,arch:process.arch,dependencyLockSha256:hash(path.join(__dirname,'../package-lock.json')),sources:Object.fromEntries(fs.readdirSync(__dirname).filter(f=>f.endsWith('.js')).sort().map(f=>[f,hash(path.join(__dirname,f))])),packages:Object.fromEntries(opts.files.map(f=>{const target=fs.existsSync(f)&&fs.statSync(f).isDirectory()?path.join(f,'app.wasm'):f;return [f,fs.existsSync(target)&&fs.statSync(target).isFile()?hash(target):null];})),scenarioSha256:opts.replayFile?hash(opts.replayFile):null,peripheralInputs:Object.fromEntries(['camera','pcmInput','manifest'].filter(k=>opts[k]&&fs.existsSync(opts[k])).map(k=>[k,hash(opts[k])]))};
+  const provenance={simulator:version,sdk:compatibility.sdkCommit,sdkWorkingTree:!!compatibility.sdkWorkingTree,abi:compatibility.abi,nodeVersion:process.version,platform:process.platform,arch:process.arch,dependencyLockSha256:hash(path.join(__dirname,'../package-lock.json')),sources:Object.fromEntries(fs.readdirSync(__dirname).filter(f=>f.endsWith('.js')).sort().map(f=>[f,hash(path.join(__dirname,f))])),packages:Object.fromEntries(opts.files.map(f=>{const target=fs.existsSync(f)&&fs.statSync(f).isDirectory()?path.join(f,'app.wasm'):f;return [f,fs.existsSync(target)&&fs.statSync(target).isFile()?hash(target):null];})),scenarioSha256:opts.replayFile?hash(opts.replayFile):null,peripheralInputs:Object.fromEntries(['camera','pcmInput','manifest'].filter(k=>opts[k]&&fs.existsSync(opts[k])).map(k=>[k,hash(opts[k])]))};
   let info, frame, lastDiagnostics=null, done = false, worker, last = Date.now(), audioReplay = [], effectReplay = new Map();
   const token = crypto.randomBytes(24).toString('hex');
   const server = http.createServer((req, res) => {
@@ -114,5 +115,5 @@ async function main(opts) {
   worker.on('exit', code => { if (!done && code) cleanup(code); });
   process.once('SIGINT', () => worker.postMessage({ type: 'stop' }));
 }
-if (require.main === module) { try { const opts = parse(process.argv.slice(2)); if (opts.help) console.log(help); else if (opts.version) console.log(JSON.stringify({ simulator: version, abi: compatibility.abi, sdkCommit: compatibility.sdkCommit, apiSha256: compatibility.contractHashes['contract/api.json'] }, null, 2)); else main(opts).catch(e => { console.error(e.stack); process.exitCode = 1; }); } catch (e) { console.error(e.message); process.exitCode = 1; } }
+if (require.main === module) { try { const opts = parse(process.argv.slice(2)); if (opts.help) console.log(help); else if (opts.version) console.log(JSON.stringify({ simulator: version, abi: compatibility.abi, sdkCommit: compatibility.sdkCommit, sdkWorkingTree: !!compatibility.sdkWorkingTree, apiSha256: compatibility.contractHashes['contract/api.json'] }, null, 2)); else main(opts).catch(e => { console.error(e.stack); process.exitCode = 1; }); } catch (e) { console.error(e.message); process.exitCode = 1; } }
 module.exports = { parse, main };
