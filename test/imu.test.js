@@ -10,7 +10,7 @@ function setup(){
 }
 test('ABI 3.7 paired IMU samples, cache TTL and u32 wraparound',t=>{
  const {h,api,out,time,values}=setup();t.after(()=>h.stop());
- assert.equal(api.aster_system_get_abi_version(),0x30900);
+ assert.equal(api.aster_system_get_abi_version(),0x30a00);
  const info=out(16),sample=out(48);assert.equal(api.aster_imu_get_info(info,16),0);
  assert.equal(h.u32(info+8),3);assert.equal(h.u32(info+12),10);
  h.input({type:'sensor',accel:[1,2,3],gyro:[4,5,6]});

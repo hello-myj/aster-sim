@@ -1,5 +1,5 @@
 'use strict';
-const FEATURES = { display:0,touch:1,mouse:2,keyboard:3,camera:4,'audio-in':5,'audio-out':6,wifi:7,bluetooth:8,accelerometer:9,gyroscope:10,filesystem:11,rtc:12,psram:13,framebuffer:14,'storage.app':11,network:15,http:16,tls:17 };
+const FEATURES = { display:0,touch:1,mouse:2,keyboard:3,camera:4,'audio-in':5,'audio-out':6,wifi:7,bluetooth:8,accelerometer:9,gyroscope:10,filesystem:11,rtc:12,psram:13,framebuffer:14,'storage.app':11,network:15,http:16,tls:17,'audio-stream':18 };
 function validateReplay(value) {
   const integer=(n,min,max)=>Number.isSafeInteger(n)&&n>=min&&n<=max;
   if (!value || value.version!==1 || !integer(value.frames,1,1000000) || !integer(value.step_ms,1,1000) || !integer(value.seed,0,0xffffffff)) throw Error('Replay requires version=1, frames, step_ms and u32 seed');

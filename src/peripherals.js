@@ -31,6 +31,12 @@ module.exports = {
     const enabled = () => this.features.has(6);
     const control = op => { if (!enabled()) return -16; const a = this.audio; a.position = this.audioPosition(); a.started = this.now(); if (op === 'pause') { if (a.state !== 1) return -12; a.state = 2; } if (op === 'resume') { if (a.state !== 2) return -12; a.state = 1; } if (op === 'stop') { a.state = 0; a.position = 0; } this.send({ type: 'audio', op }); return 0; };
     return {
+      // Optional ABI 3.10 capability is absent: no fake whole-file streaming.
+      aster_audio_stream_open: () => -16,
+      aster_audio_stream_write: () => -16,
+      aster_audio_stream_finish: () => -16,
+      aster_audio_stream_status: () => -16,
+      aster_audio_stream_close: () => -16,
       aster_audio_get_info: (p, n) => { if (!enabled() && !this.pcmInput) return -16; if (!this.struct(p, n, 24)) return -1; [44100, 2, 16, 0].forEach((v, i) => this.u32(p + 8 + i * 4, v)); return 0; },
       aster_audio_set_volume: volume => { if (!enabled()) return -16; if (volume < 0 || volume > 100) return -1; this.volume = volume; this.send({ type: 'audio', op: 'volume', volume }); return 0; },
       aster_audio_get_volume: () => enabled() ? this.volume : -16,

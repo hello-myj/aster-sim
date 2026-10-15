@@ -100,3 +100,13 @@ test('external SDK 2048 loads 16 kHz effects and loops BGM', { skip: !process.en
   host.input({ type: 'audio-feedback', session: starts[1].session, event: 'ended' }); host.tick();
   assert.equal(sent.filter(m => m.op === 'start').length, 3);
 });
+
+test('ABI 3.10 compressed stream capability is explicitly unavailable', () => {
+  const h = new Host({manifest:{id:'test.stream',permissions:[]},assets:new Map()});
+  try {
+    const api=h.imports();
+    assert.equal(api.aster_system_has_feature(18),0);
+    for(const method of ['open','write','finish','status','close'])
+      assert.equal(api['aster_audio_stream_'+method](1,0,1),-16);
+  } finally { h.stop(); }
+});

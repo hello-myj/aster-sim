@@ -56,7 +56,7 @@ class Host {
     this.fit = null;
     this.screen = createCanvas(this.width, this.height); this.presentCount = 0;
     this.send = options.send || (() => {});
-    const names = { display: 0, touch: 1, mouse: 2, keyboard: 3, camera: 4, 'audio-in': 5, 'audio-out': 6, wifi: 7, bluetooth: 8, accelerometer: 9, gyroscope: 10, filesystem: 11, rtc: 12, psram: 13, framebuffer: 14, network: 15, http:16, tls:17 };
+    const names = { display: 0, touch: 1, mouse: 2, keyboard: 3, camera: 4, 'audio-in': 5, 'audio-out': 6, wifi: 7, bluetooth: 8, accelerometer: 9, gyroscope: 10, filesystem: 11, rtc: 12, psram: 13, framebuffer: 14, network: 15, http:16, tls:17, 'audio-stream':18 };
     for (const feature of this.manifest.requires || []) if (!this.features.has(FEATURES[feature])) throw Error(`Required capability unavailable: ${feature}`);
   }
   now() { return this.options.clock ? this.options.clock() : Math.floor(performance.now() - this.boot); }
@@ -123,7 +123,7 @@ class Host {
   log(level, message) { const item = { level, message, ms: this.now() }; this.logs.push(item); if (this.logs.length > 200) this.logs.shift(); this.options.log?.(item); this.send({ type: 'log', ...item }); }
   imports() {
     const a = {
-      aster_system_get_abi_version: () => 0x30900,
+      aster_system_get_abi_version: () => 0x30a00,
       aster_system_has_feature: bit => this.features.has(bit) ? 1 : 0,
       aster_app_exit: code => { this.exitCode = code; },
       aster_app_set_framerate: fps => { this.fps = Math.min(fps >>> 0 || 30, 60); return 0; },
