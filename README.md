@@ -1,7 +1,7 @@
 # aster-sim
 
 Windows 上专门运行 Aster APP 的模拟器，名称 **aster-sim**（Aster Simulator）。
-ABI 3.8.0；默认且目前仅执行 WASM。`.ast` 中的 Xtensa AOT 可以保留，但始终忽略；纯 `.aot` 不接受。
+ABI 3.9.0；默认且目前仅执行 WASM。`.ast` 中的 Xtensa AOT 可以保留，但始终忽略；纯 `.aot` 不接受。
 APP 可直接使用 SDK 编译产物，不需要移植成桌面应用。独立文件夹实现，没有修改 SDK 固定契约。
 工程独立放置于 SDK 外，默认与 `aster-sdk` 同级。运行模拟器及自动测试无需 SDK；只有编译 APP / AOT 和设备部署需要 SDK 工具。
 
@@ -61,7 +61,7 @@ npm run portable
 - 音频输出：浏览器解码 WAV/MP3，支持背景播放、暂停、恢复、seek、音量、最多四个音效并混音。界面需点击“启用声音”解除浏览器播放限制。音效支持 8–192 kHz 双声道 S16LE WAV，由浏览器重采样至输出设备，缓存后即时混音；同一音效重放会重新开始。浏览器反馈 MP3 解码时长和自然播放结束状态，APP 可据此循环播放；录音与播放时序不模拟设备阻塞；lyrics 当前返回空。
 - Wi-Fi：默认关闭；`--wifi` 开启固定扫描项和 station 状态模拟，仍检查 wifi 权限。返回测试地址 192.0.2.2，不操作 Windows Wi-Fi，不提供网络通信。
 - appmgr：`--apps DIR` 加载额外包，支持查询、单 APP 切换；uninstall 只从本次模拟目录移除记录，不删除源 `.ast`，重启可重新加载。拒绝卸载当前 APP。
-- 蓝牙、PSRAM 不声明可用；手册没有公开的 socket/HTTP/蓝牙通信接口，模拟器不添加这些 ABI。
+- 蓝牙、PSRAM不声明可用。`--network`单独开启真实TCP/UDP及HTTP/HTTPS；默认只使用ISRG Root X1，开发测试CA使用`--network-ca FILE`，仍强制校验证书。HTTP与TCP/UDP共用两槽、HTTPS最多一槽，终态句柄须关闭。Node底层socket/TLS缓冲和错误细节不等于设备内存或密码学实现。
 - 常用 SDK libc imports 实现；C++ 异常等不受支持的 imports 明确拒绝。
 
 虚拟设备存储默认全部放在内存中（包括 `/data`、`/cache`、KV、`/sd` 和 `/music`），不创建 `state` 目录，也不自动保存APP数据。重新加载或切换APP时保留当前模拟器会话的数据，退出模拟器后全部释放。APP包中的 `/assets` 直接读取，不解包到磁盘。
@@ -111,7 +111,7 @@ aster deploy PATH\your.app.ast --target xtensa --port COM24 --run
 
 ## 跟随 SDK 更新（2026-10-12）
 
-模拟器 0.2.0 已对照同级 SDK 的 ABI 3.8.0 工作区契约。运行无需 SDK；`src/sdk-compat.json` 保存审核过的公开契约指纹。窗口大小只由分辨率决定，不读取包的 `target_id`，也没有 `--board` / `--target`。`--version` 报告模拟器版本、支持的 ABI、对照时的 SDK 提交和 API SHA256。SDK 工具发布版本与模拟器版本独立，提交不同不代表 APP 接口不兼容。
+模拟器 0.2.0 已对照同级 SDK 的 ABI 3.9.0 工作区契约。运行无需 SDK；`src/sdk-compat.json` 保存审核过的公开契约指纹。窗口大小只由分辨率决定，不读取包的 `target_id`，也没有 `--board` / `--target`。`--version` 报告模拟器版本、支持的 ABI、对照时的 SDK 提交和 API SHA256。SDK 工具发布版本与模拟器版本独立，提交不同不代表 APP 接口不兼容。
 
 ```powershell
 # 在模拟器源码目录检查最新 SDK（默认同级 aster-sdk，也可传任意完整 SDK 路径）
@@ -125,7 +125,7 @@ npm run check-sdk -- E:\path\to\aster-sdk
 
 默认窗口为 240×320；`--resolution 240x320` 与 `--resolution 320x480` 分别用于验证立创和微雪的竖屏布局。APP 可根据查询到的尺寸创建原生画布并选择实际字号。SDK 的 CPU 目标不包含屏幕尺寸；模拟器不提供开发板预设或板级内存上限。
 
-SDK 更新后先运行 `check-sdk`。它检查真实契约文件与 lock 校验值、公开头文件/API 指纹、72 个 APP 导入处理函数、原生字号度量与 CPU 平台配置。即使 ABI 版本号相同，公开结构或签名改变也会报告失败；需要先审查并适配实现，再更新快照，不能只修改支持版本字符串。此检查覆盖接口一致性，不证明硬件行为完全等价。
+SDK 更新后先运行 `check-sdk`。它检查真实契约文件与 lock 校验值、公开头文件/API 指纹、85 个 APP 导入处理函数、原生字号度量与 CPU 平台配置。即使 ABI 版本号相同，公开结构或签名改变也会报告失败；需要先审查并适配实现，再更新快照，不能只修改支持版本字符串。此检查覆盖接口一致性，不证明硬件行为完全等价。
 
 模拟器执行包中的 WASM，忽略 Xtensa AOT。SDK 共享串口、主机便携打包和多开发板工具链更新不改变 APP ABI，因此不需要为这些主机更新增加模拟器导入。最新版 APP 应先用当前 SDK 编译，再在 Windows 上执行 `npm test` 及外部 APP 集成测试，最后 `npm run portable` 刷新整个 `out/aster-sim`。发布时仍分发整个模拟器目录。
 
@@ -163,3 +163,5 @@ npm test
 G8 的图片命令使用与固件相同的原生RGB565覆盖率混合和整数最近邻规则，包括负坐标、裁剪、透明键与alpha；PNG独立alpha在解码时合成到黑色，fit尺寸四舍五入。文字仍使用主机字体光栅器，不声称字形像素与cpfont相同。半透明图片缓存一个RGB565源副本（每源像素2字节），随bitmap句柄释放；不将该模拟器开销推算为设备内存。G8工作区更新尚未发布，提交配套SDK后需同步sdkCommit并重跑固定版本CI。
 
 工作区ABI3.8支持`--network`开启真实IPv4 TCP/UDP，APP需声明net权限与network能力。Wi-Fi状态模拟仍由`--wifi`控制，二者独立；真实网络不用于确定性replay。网络接口语义和有界队列参见配套SDK的`docs/network.md`。SDK契约快照标记为工作区版本，尚未发布。
+
+ABI3.9工作区新增六个HTTP/HTTPS导入，未发布Release。两种APP示例见配套SDK的`docs/http.md`；Windows/Linux均执行真实网络，不能与确定性replay共用。响应公开队列2048B，不分配整份响应；支持GET/HEAD/有界POST、重复头查询、重定向、取消与APP退出回收。

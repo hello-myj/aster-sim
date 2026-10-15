@@ -2,7 +2,7 @@
 // ABI 3.8. Only copied bytes and numeric endpoint IDs outlive an import call.
 const net = require('node:net'), dns = require('node:dns'), dgram = require('node:dgram');
 const { performance } = require('node:perf_hooks');
-const live = new Set(); let generation = 0;
+const {live, allocate} = require('./network-budget');
 const ERR = {EINVAL:-1,ENOMEM:-2,ENOTSUP:-3,EPERM:-4,EBUSY:-5,EIO:-7,ETIMEDOUT:-8,EBADF:-10,ENOSPC:-11,EAGAIN:-15,ECANCELED:-19,EMSGSIZE:-20,EPIPE:-21,ENOTFOUND:-22,EAI_AGAIN:-22,ECONNRESET:-23,ENOTCONN:-23,ECONNREFUSED:-24,ENETUNREACH:-25,EHOSTUNREACH:-25};
 const mapped = e => ERR[e?.code] || -7;
 const unicast = ip => net.isIP(ip)===4 && +ip.split('.')[0]>0 && +ip.split('.')[0]<224;
@@ -26,8 +26,8 @@ class Network {
     if(this.gate())return this.gate();[kind,p,n,port,ms]=[kind,p,n,port,ms].map(x=>x>>>0);
     let name;
     if(kind===2){if(p||n||port||ms)return -1;}else if(kind!==1||!port||port>65535||!ms||ms>30000)return -1;else name=this.hostName(p,n);
-    if(live.size>=2||generation===0x7fffffff)return -11;
-    const s={id:++generation,kind,state:1,phase:1,error:0,tx:[],rx:[],txQueued:0,rxBytes:0n,txBytes:0n,dropped:0,localPort:0,resolving:false,socket:null,bound:false,closing:false};
+    const id=allocate();if(!id)return -11;
+    const s={id,kind,state:1,phase:1,error:0,tx:[],rx:[],txQueued:0,rxBytes:0n,txBytes:0n,dropped:0,localPort:0,resolving:false,socket:null,bound:false,closing:false};
     live.add(s);this.slots.set(s.id,s);
     if(kind===2){
       const socket=s.socket=dgram.createSocket('udp4');

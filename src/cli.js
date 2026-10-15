@@ -10,7 +10,7 @@ const { WebSocketServer, WebSocket } = require('ws');
 const compatibility = require('./sdk-compat.json');
 const { validateReplay } = require('./replay');
 const version = '0.2.0';
-const help = `aster-sim ${version} — Aster ABI 3.8 WASM APP simulator
+const help = `aster-sim ${version} — Aster ABI 3.9 WASM APP simulator
 Usage: aster-sim APP.ast [--resolution 240x320] [options]
   --width N --height N    Window size; manifest orientation applies. This is the glass.
   --scale N              Window display scale (default 2; APP pixels unchanged)
@@ -20,7 +20,8 @@ Usage: aster-sim APP.ast [--resolution 240x320] [options]
   --apps DIR             Additional .ast packages for appmgr switching
   --camera FILE          Image as virtual RGB565 camera (max 320x240)
   --pcm-input FILE       Raw 44100 Hz stereo S16LE recording fixture
-  --network              Enable real IPv4 TCP/UDP (permission net required)
+  --network              Enable real IPv4 TCP/UDP/HTTP/HTTPS (permission net)
+  --network-ca FILE      Development HTTPS CA PEM (verification stays enabled)
   --wifi                 Enable simulated Wi-Fi station (no host network changes)
   --no-audio             Report audio-out unavailable
   --no-open              Serve GUI without automatically opening Edge
@@ -37,7 +38,7 @@ Only WASM is executed; any Xtensa AOT payload in .ast is ignored.
 function parse(argv) {
   const opts = { width: 240, height: 320, scale: 2, port: 0, watchdog: 10, files: [] };
   const booleans = { '--headless': 'headless', '--no-open': 'noOpen', '--no-audio': 'noAudio', '--wifi': 'wifi', '--network': 'network' };
-  const values = { '--width': 'width', '--height': 'height', '--scale': 'scale', '--port': 'port', '--frames': 'frames', '--watchdog': 'watchdog', '--state': 'state', '--apps': 'apps', '--camera': 'camera', '--pcm-input': 'pcmInput', '--screenshot': 'screenshot', '--manifest': 'manifest', '--pubkey': 'pubkey', '--replay': 'replayFile', '--diagnostics': 'diagnosticsFile' };
+  const values = { '--network-ca':'networkCA', '--width': 'width', '--height': 'height', '--scale': 'scale', '--port': 'port', '--frames': 'frames', '--watchdog': 'watchdog', '--state': 'state', '--apps': 'apps', '--camera': 'camera', '--pcm-input': 'pcmInput', '--screenshot': 'screenshot', '--manifest': 'manifest', '--pubkey': 'pubkey', '--replay': 'replayFile', '--diagnostics': 'diagnosticsFile' };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]; if (arg === '--version') return { version: true };
     if (arg === '--help' || arg === '-h') return { help: true };
