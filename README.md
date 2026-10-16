@@ -1,7 +1,7 @@
 # aster-sim
 
 Windows 上专门运行 Aster APP 的模拟器，名称 **aster-sim**（Aster Simulator）。
-ABI 3.10.0；默认且目前仅执行 WASM。`.ast` 中的 Xtensa AOT 可以保留，但始终忽略；纯 `.aot` 不接受。
+ABI 3.11.0；默认且目前仅执行 WASM。`.ast` 中的 Xtensa AOT 可以保留，但始终忽略；纯 `.aot` 不接受。
 APP 可直接使用 SDK 编译产物，不需要移植成桌面应用。独立文件夹实现，没有修改 SDK 固定契约。
 工程独立放置于 SDK 外，默认与 `aster-sdk` 同级。运行模拟器及自动测试无需 SDK；只有编译 APP / AOT 和设备部署需要 SDK 工具。
 
@@ -111,7 +111,7 @@ aster deploy PATH\your.app.ast --target xtensa --port COM24 --run
 
 ## 跟随 SDK 更新（2026-10-12）
 
-模拟器 0.2.0 已对照同级 SDK 的 ABI 3.10.0 工作区契约。运行无需 SDK；`src/sdk-compat.json` 保存审核过的公开契约指纹。窗口大小只由分辨率决定，不读取包的 `target_id`，也没有 `--board` / `--target`。`--version` 报告模拟器版本、支持的 ABI、对照时的 SDK 提交和 API SHA256。SDK 工具发布版本与模拟器版本独立，提交不同不代表 APP 接口不兼容。
+模拟器 0.2.0 已对照同级 SDK 的 ABI 3.11.0 工作区契约。运行无需 SDK；`src/sdk-compat.json` 保存审核过的公开契约指纹。窗口大小只由分辨率决定，不读取包的 `target_id`，也没有 `--board` / `--target`。`--version` 报告模拟器版本、支持的 ABI、对照时的 SDK 提交和 API SHA256。SDK 工具发布版本与模拟器版本独立，提交不同不代表 APP 接口不兼容。
 
 ```powershell
 # 在模拟器源码目录检查最新 SDK（默认同级 aster-sdk，也可传任意完整 SDK 路径）
@@ -167,3 +167,5 @@ G8 的图片命令使用与固件相同的原生RGB565覆盖率混合和整数�
 ABI3.9工作区新增六个HTTP/HTTPS导入，未发布Release。两种APP示例见配套SDK的`docs/http.md`；Windows/Linux均执行真实网络，不能与确定性replay共用。响应公开队列2048B，不分配整份响应；支持GET/HEAD/有界POST、重复头查询、重定向、取消与APP退出回收。
 
 ABI 3.10 的 `aster_audio_stream_*` 导入已识别，但浏览器流式 MP3 输出尚未实现：不宣告 `audio-stream` 能力，五接口返回 ENODEV。声明该能力的在线音乐 APP 会在加载阶段明确拒绝，需实机验证，不能把完整文件播放当作边下载边播。
+
+ABI 3.11 工作区提供 MQTT 3.1.1（QoS0/1、有限队列、重连及订阅恢复）和真实 MQTTS 校验。显式使用 `--network`；MQTT、HTTP、TCP/UDP 共用两个连接和一个 TLS 名额。示例见配套 SDK `apps/mqtt-echo` 和开发手册第18节。契约快照固定到对应 SDK 提交，尚未发布 Release。

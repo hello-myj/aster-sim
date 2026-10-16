@@ -19,7 +19,7 @@ test('replay repeats complete WASM state with a fixed clock, including pause',t=
 });
 test('allocator failure has APP/phase/ABI diagnostics and nonzero exit',t=>{
  const a=run(t,scenario({faults:{allocation_fail_at:1}}));assert.equal(a.result.status,1);
- assert.equal(a.report.diagnostics.appId,'test.fixture');assert.match(a.report.error,/event buffer memory/);assert.equal(a.report.abi,'3.10.0');
+ assert.equal(a.report.diagnostics.appId,'test.fixture');assert.match(a.report.error,/event buffer memory/);assert.equal(a.report.abi,'3.11.0');
 });
 test('hard-required missing capability is reported before initialization',t=>{
  const {Host}=require('../src/host');assert.throws(()=>new Host({manifest:{id:'test.missing',requires:['display']},assets:new Map()}, {missingFeatures:['display']}),/Required capability unavailable/);

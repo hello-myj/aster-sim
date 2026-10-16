@@ -4,6 +4,7 @@ const crypto = require('node:crypto');
 const { FEATURES } = require('./replay');
 const { Network } = require('./network');
 const { Http } = require('./http');
+const { Mqtt } = require('./mqtt');
 const path = require('node:path');
 const { performance } = require('node:perf_hooks');
 const { createCanvas, textFont, decodeImage, to565, from565, execGraphics } = require('./graphics');
@@ -38,9 +39,10 @@ class Host {
     this.features = new Set([0, 1, 2, 3, 9, 10, 11, 12, 14]);
     if (options.wifi) this.features.add(7);
     if (options.network && options.clock) throw Error("Real networking is unavailable in deterministic replay");
-    if (options.network) for (const bit of [15,16,17]) this.features.add(bit);
+    if (options.network) for (const bit of [15,16,17,19]) this.features.add(bit);
     this.network = new Network(this);
     this.http = new Http(this);
+    this.mqtt = new Mqtt(this);
     if (options.camera) { this.camera = decodeImage(fs.readFileSync(options.camera), 320, 240).canvas; this.features.add(4); }
     if (options.pcmInput) { this.pcmInput = fs.readFileSync(options.pcmInput); this.features.add(5); }
     if (!options.noAudio) this.features.add(6);
@@ -56,7 +58,7 @@ class Host {
     this.fit = null;
     this.screen = createCanvas(this.width, this.height); this.presentCount = 0;
     this.send = options.send || (() => {});
-    const names = { display: 0, touch: 1, mouse: 2, keyboard: 3, camera: 4, 'audio-in': 5, 'audio-out': 6, wifi: 7, bluetooth: 8, accelerometer: 9, gyroscope: 10, filesystem: 11, rtc: 12, psram: 13, framebuffer: 14, network: 15, http:16, tls:17, 'audio-stream':18 };
+    const names = { display: 0, touch: 1, mouse: 2, keyboard: 3, camera: 4, 'audio-in': 5, 'audio-out': 6, wifi: 7, bluetooth: 8, accelerometer: 9, gyroscope: 10, filesystem: 11, rtc: 12, psram: 13, framebuffer: 14, network: 15, http:16, tls:17, 'audio-stream':18, mqtt:19 };
     for (const feature of this.manifest.requires || []) if (!this.features.has(FEATURES[feature])) throw Error(`Required capability unavailable: ${feature}`);
   }
   now() { return this.options.clock ? this.options.clock() : Math.floor(performance.now() - this.boot); }
@@ -123,7 +125,7 @@ class Host {
   log(level, message) { const item = { level, message, ms: this.now() }; this.logs.push(item); if (this.logs.length > 200) this.logs.shift(); this.options.log?.(item); this.send({ type: 'log', ...item }); }
   imports() {
     const a = {
-      aster_system_get_abi_version: () => 0x30a00,
+      aster_system_get_abi_version: () => 0x30b00,
       aster_system_has_feature: bit => this.features.has(bit) ? 1 : 0,
       aster_app_exit: code => { this.exitCode = code; },
       aster_app_set_framerate: fps => { this.fps = Math.min(fps >>> 0 || 30, 60); return 0; },
@@ -205,7 +207,7 @@ class Host {
         (this.options.clock ? [d.getUTCFullYear(), d.getUTCMonth()+1, d.getUTCDate(), d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds(), d.getUTCDay()] : [d.getFullYear(), d.getMonth() + 1, d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds(), d.getDay()]).forEach((v, i) => this.u32(p + 20 + i * 4, v)); return 0;
       },
     };
-    Object.assign(a, this.storageImports(), this.audioImports(), this.wifiImports(), this.network.imports(), this.http.imports(), this.libcImports());
+    Object.assign(a, this.storageImports(), this.audioImports(), this.wifiImports(), this.network.imports(), this.http.imports(), this.mqtt.imports(), this.libcImports());
     a.aster_appmgr_count = () => { this.permission('appmgr'); return (this.options.catalog || [this.pkg]).length; };
     a.aster_appmgr_list = (i, p, n) => {
       this.permission('appmgr'); const app = (this.options.catalog || [this.pkg])[i]; if (!app) return -6;
@@ -292,7 +294,7 @@ class Host {
     if (msg.type === 'pause') { this.setPaused(!this.paused); }
   }
   setPaused(pause) { if (this.exitCode !== null || pause === this.paused) return; if (pause) { this.gfxFrame=null;this.call('aster_app_pause'); this.paused = true; this.pauseAt = this.now(); } else { const elapsed = this.now() - this.pauseAt; for (const t of this.handles.values()) if (t.kind === 'timer') t.due += elapsed; this.paused = false; this.call('aster_app_resume'); } this.keys.clear(); this.touch = null; }
-  stop() { if (this.stopped) return; this.stopped = true;this.gfxFrame=null; try { this.call('aster_app_stop'); } finally { try { this.call('aster_app_destroy'); } finally { this.http.stop(); this.network.stop(); for (const h of this.handles.values()) if (h.kind === 'file' && h.fd !== undefined) this.storageFs.closeSync(h.fd); this.handles.clear(); this.send({ type: 'audio', op: 'stop' }); } } }
+  stop() { if (this.stopped) return; this.stopped = true;this.gfxFrame=null; try { this.call('aster_app_stop'); } finally { try { this.call('aster_app_destroy'); } finally { this.mqtt.stop(); this.http.stop(); this.network.stop(); for (const h of this.handles.values()) if (h.kind === 'file' && h.fd !== undefined) this.storageFs.closeSync(h.fd); this.handles.clear(); this.send({ type: 'audio', op: 'stop' }); } } }
 }
 Object.assign(Host.prototype, require('./storage'), require('./libc'), require('./peripherals'));
 module.exports = { Host, E, errno };
