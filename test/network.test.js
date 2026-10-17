@@ -1,6 +1,7 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict'),net=require('node:net'),dgram=require('node:dgram');
 const {Host}=require('../src/host');
+require('../scripts/integration-inputs').requireIntegrationInputs();
 const delay=()=>new Promise(r=>setTimeout(r,10));
 async function until(fn){for(let i=0;i<300;i++){const value=fn();if(value)return value;await delay();}throw Error('network test deadline');}
 function setup(t,permissions=['net'],network=true){const h=new Host({manifest:{id:'test.net',permissions},assets:new Map()},{network});h.memory=new WebAssembly.Memory({initial:1});h.heap=4096;const api=h.imports();t.after(()=>h.stop());h.bytes(100,9).write('127.0.0.1');return {h,api,status:id=>{assert.equal(api.aster_network_status(id,500,56),0);return h.u32(512);}};}
@@ -66,4 +67,17 @@ test('retired DNS callbacks cannot connect a closed session; quota stays bounded
  const next=api.aster_network_open(2,0,0,0,0);assert.ok(next>old);assert.equal(api.aster_network_open(2,0,0,0,0),-11);
  await delay();assert.equal(api.aster_network_status(old,500,56),-10);
  const free=api.aster_network_open(2,0,0,0,0);assert.ok(free>next);late(null,['127.0.0.1']);assert.equal(api.aster_network_status(old,500,56),-10);api.aster_network_close(next);api.aster_network_close(free);await delay();
+});
+
+const echoPackage=process.env.ASTER_NETWORK_ECHO_AST;
+test('actual SDK TCP/UDP Echo APP validates content and releases its session',{skip:!echoPackage},async t=>{
+ const tcp=net.createServer(s=>{let total=0;s.on('error',()=>{});s.on('data',b=>{total+=b.length;s.write(b);if(total>=512)s.end();});});
+ const udp=dgram.createSocket('udp4');udp.on('message',(data,p)=>udp.send(data,p.port,p.address));
+ tcp.listen(Number(process.env.ASTER_NETWORK_TEST_TCP_PORT||17780),'127.0.0.1');udp.bind(Number(process.env.ASTER_NETWORK_TEST_UDP_PORT||17781),'127.0.0.1');
+ await Promise.all([new Promise(r=>tcp.once('listening',r)),new Promise(r=>udp.once('listening',r))]);
+ t.after(()=>{tcp.close();udp.close();});
+ const {loadPackage}=require('../src/package');
+ const h=new Host(loadPackage(echoPackage),{network:true});t.after(()=>h.stop());h.start();
+ await until(()=>{h.tick();assert.ok(!h.logs.some(x=>x.message.includes('NETAPP FAIL')),JSON.stringify(h.logs));return h.logs.some(x=>x.message.includes('NETAPP round=1'));});
+ await until(()=>{h.tick();return h.exitCode!==null;});h.stop();assert.equal(h.exitCode,0);assert.equal(h.network.slots.size,0);assert.ok(h.presentCount>0);
 });

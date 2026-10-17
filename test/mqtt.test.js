@@ -57,7 +57,7 @@ test('MQTT permission/capability and malformed frames',async t=>{
 });
 const packageFile=process.env.ASTER_MQTT_ECHO_AST;
 test('actual SDK MQTT Echo APP imports, content, rendering and stop cleanup',{skip:!packageFile},async t=>{
- const peer=await broker(t,1883);
+ const peer=await broker(t,Number(process.env.ASTER_MQTT_TEST_PORT||1883));
  const {loadPackage}=require('../src/package');
  const h=new Host(loadPackage(packageFile),{network:true});t.after(()=>h.stop());h.start();
  await until(()=>{h.tick();assert.ok(!h.logs.some(x=>x.message.includes('MQTTAPP FAIL')),JSON.stringify(h.logs));return h.logs.some(x=>x.message.includes('MQTTAPP round=1'));});
