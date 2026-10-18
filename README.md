@@ -171,3 +171,5 @@ ABI 3.10 的 `aster_audio_stream_*` 导入已识别，但浏览器流式 MP3 输
 ABI 3.11 工作区提供 MQTT 3.1.1（QoS0/1、有限队列、重连及订阅恢复）和真实 MQTTS 校验。显式使用 `--network`；MQTT、HTTP、TCP/UDP 共用两个连接和一个 TLS 名额。示例见配套 SDK `apps/mqtt-echo` 和开发手册第18节。契约快照固定到对应 SDK 提交，尚未发布 Release。
 
 ABI 3.12 工作区提供有界 WebSocket/WSS 客户端（文本/二进制/空消息边界、自动 ping/pong、关闭握手与终态保留），显式使用 `--network`；全设备仅一个 WS 客户端，与 HTTP/MQTT/TCP/UDP 共用两个连接和一个 TLS 名额，接收侧有界队列并在首个未取消息后暂停 socket，用 TCP 背压替代无限缓存。真实证书与 WSS 校验需要 `ASTER_WS_TEST_CERTS`，SDK 包集成需要 `ASTER_WS_ECHO_AST`（示例 `apps/ws-echo`，开发手册第19节）。确定性 replay 不接受真实 WS 连接。尚未发布 Release。
+
+N5.4 前台下载续传为 SDK 参考示例（`apps/http-resume`），复用既有 HTTP/文件系统导入，模拟器无专属代码；集成测试需要 `ASTER_HTTP_RESUME_AST` 与 `ASTER_RESUME_SERVER`（指向固件仓库 `tools/validation/network_resume_server.cjs`，fixture 自身拉起 9082 并中途断流），断言"断流→206 续传→整文件校验提交→temp 清理"。

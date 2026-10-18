@@ -83,6 +83,32 @@ test('HTTPS real verification, single TLS quota, failure recovery and APP stop',
  id=start(x,`https://${lan}:9445/fixed?n=8`);got=await body(x,id);assert.equal(got.s.error,-28);assert.equal(got.s.cert,1);x.a.aster_http_close(id);await delay();
  id=start(x,`https://${lan}:9443/stall`);await delay();x.h.stop();await delay();assert.equal(x.h.http.slots.size,0);
 });
+/* N5.4 resume reference: packaged APP + Range-aware fixture that drops the
+ * stream mid-flight, forcing a real 206 continuation; verifies the final
+ * file end to end and the temp cleanup. */
+const resumeFile=process.env.ASTER_HTTP_RESUME_AST, resumeServer=process.env.ASTER_RESUME_SERVER;
+test('actual SDK HTTP RESUME APP survives mid-stream drops and commits verified file',
+ {skip:!resumeFile||!resumeServer},async t=>{
+ const {spawn}=require('node:child_process');
+ const srv=spawn(process.execPath,[resumeServer],{stdio:['ignore','pipe','inherit']});
+ let out='';srv.stdout.on('data',b=>{out+=b;});
+ t.after(()=>srv.kill());
+ await new Promise(r=>{const iv=setInterval(()=>{if(out.includes('ready')){clearInterval(iv);r();}},25);setTimeout(()=>{clearInterval(iv);r();},3000);});
+ const {loadPackage}=require('../src/package');
+ const h=new Host(loadPackage(resumeFile),{network:true});t.after(()=>h.stop());h.start();
+ await until(()=>{h.tick();assert.ok(!h.logs.some(x=>x.message.includes('DLAPP FAIL')),JSON.stringify(h.logs));
+  return h.logs.some(x=>x.message.includes('DLAPP PASS'));});
+ h.tick();assert.equal(h.http.slots.size,0);
+ const data=h.storageFs.readFileSync(path.join(h.root,'data/file.bin'));
+ assert.equal(data.length,65536);
+ assert.deepEqual(data,Buffer.from(Array.from({length:65536},(_,i)=>i%251)));
+ const lines=out.split('\n').filter(l=>l.trim().startsWith('{')).map(l=>JSON.parse(l));
+ const dropped=lines.filter(l=>l.droppedAt), part=lines.filter(l=>l.status===206);
+ assert.ok(dropped.length>=1,'mid-stream drop happened: '+out);
+ assert.ok(part.length>=1,'resume 206 issued: '+out);
+ assert.ok(!lines.some(l=>l.status===200&&l.req>1),'never re-GET after resume started: '+out);
+ assert.ok(!h.storageFs.existsSync(path.join(h.root,'data/file.part')),'temp removed after commit');
+});
 for(const kind of ['FETCH','DOWNLOAD']){
  const file=process.env['ASTER_HTTP_'+kind+'_AST'];
  test('actual SDK HTTP '+kind+' APP content and resource cleanup',{skip:!file},async t=>{
