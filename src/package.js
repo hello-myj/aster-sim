@@ -8,10 +8,11 @@ function validRelative(p) {
     !p.includes(':') && !p.includes('\0') && !p.startsWith('/') &&
     p.split('/').every(x => x && x !== '.' && x !== '..' && !/[. ]$/.test(x) && !/[<>"|?*\x00-\x1f]/.test(x) && !/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(x));
 }
+const supported = require('./sdk-compat.json').abi.split('.').map(Number);
 function checkManifest(m) {
   if (!/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$/.test(m.id) || m.id.includes('..')) throw Error('Invalid APP ID');
-  const abi = String(m.abi?.min || m.abi?.target || '3.11').split('.').map(Number);
-  if (abi[0] !== 3 || abi[1] > 11) throw Error('Requires unsupported ABI; host is 3.11');
+  const abi = String(m.abi?.min || m.abi?.target || supported.join('.')).split('.').map(Number);
+  if (abi[0] !== supported[0] || abi[1] > supported[1]) throw Error(`Requires unsupported ABI; host is ${supported.join('.')}`);
   if (m.orientation && !['portrait', 'landscape'].includes(m.orientation)) throw Error('Invalid orientation');
   return m;
 }
@@ -26,7 +27,7 @@ function loadPackage(file, options = {}) {
   if (b.subarray(0, 4).equals(Buffer.from([0, 97, 115, 109]))) {
     const mf = options.manifest || path.join(path.dirname(file), 'manifest.json');
     manifest = fs.existsSync(mf) ? JSON.parse(fs.readFileSync(mf, 'utf8')) :
-      { id: 'local.wasm', name: path.basename(file), abi: { min: '3.11' }, permissions: [] };
+      { id: 'local.wasm', name: path.basename(file), abi: { min: supported.join('.') }, permissions: [] };
     wasm = b;
   } else {
     if (b.length < 64 || b.toString('ascii', 0, 4) !== 'ASTP' || b.readUInt16LE(4) !== 1) throw Error('Expected .ast (ASTP v1) or .wasm; AOT-only modules cannot run on Windows');
