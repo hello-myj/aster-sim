@@ -69,4 +69,4 @@ function loadPackage(file, options = {}) {
   if (wasm.length < 8 || !wasm.subarray(0, 4).equals(Buffer.from([0, 97, 115, 109]))) throw Error('No portable WASM payload');
   return { file, manifest, wasm, assets, hasAot };
 }
-module.exports = { loadPackage, validRelative };
+module.exports = { loadPackage, checkManifest, validRelative };

@@ -6,6 +6,7 @@ const { Network } = require('./network');
 const { Http } = require('./http');
 const { Mqtt } = require('./mqtt');
 const { Ws } = require('./ws');
+const { NetAbi } = require('./net');
 const path = require('node:path');
 const { performance } = require('node:perf_hooks');
 const { createCanvas, textFont, decodeImage, to565, from565, execGraphics } = require('./graphics');
@@ -50,6 +51,7 @@ class Host {
     this.http = new Http(this);
     this.mqtt = new Mqtt(this);
     this.ws = new Ws(this);
+    this.netabi = new NetAbi(this);
     if (options.camera) { this.camera = decodeImage(fs.readFileSync(options.camera), 320, 240).canvas; this.features.add(4); }
     if (options.pcmInput) { this.pcmInput = fs.readFileSync(options.pcmInput); this.features.add(5); }
     if (!options.noAudio) this.features.add(6);
@@ -214,7 +216,7 @@ class Host {
         (this.options.clock ? [d.getUTCFullYear(), d.getUTCMonth()+1, d.getUTCDate(), d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds(), d.getUTCDay()] : [d.getFullYear(), d.getMonth() + 1, d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds(), d.getDay()]).forEach((v, i) => this.u32(p + 20 + i * 4, v)); return 0;
       },
     };
-    Object.assign(a, this.storageImports(), this.audioImports(), this.wifiImports(), this.network.imports(), this.http.imports(), this.mqtt.imports(), this.ws.imports(), this.libcImports());
+    Object.assign(a, this.storageImports(), this.audioImports(), this.wifiImports(), this.netabi.imports(), this.libcImports());
     a.aster_appmgr_count = () => { this.permission('appmgr'); return (this.options.catalog || [this.pkg]).length; };
     a.aster_appmgr_list = (i, p, n) => {
       this.permission('appmgr'); const app = (this.options.catalog || [this.pkg])[i]; if (!app) return -6;

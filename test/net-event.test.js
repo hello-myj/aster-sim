@@ -1,3 +1,4 @@
+const {legacy}=require('../src/net');
 'use strict';
 // N5.5: coalesced network state events in the simulator. Mirrors the firmware
 // contract: one pending change per handle (newest wins), bounded to 8 distinct
@@ -23,22 +24,22 @@ function setup(t){
  };
  t.after(()=>h.stop());
  h.start();
- return {h,a};
+ return {h,a,n:legacy(h)};
 }
 test('net events coalesce per handle: newest state wins, no queue buildup',{skip:!process.env.ASTER_NET_EVENT_APP},t=>{
  const x=setup(t);
- x.h.netEvent(7,3,1); x.h.netEvent(7,3,2); x.h.netEvent(7,3,4);
+ x.h.netEventRaw(7,3,1); x.h.netEventRaw(7,3,2); x.h.netEventRaw(7,3,4);
  assert.equal(x.h.netEvents.size,1);
  assert.equal(x.h.pumpNetEvent(),true);
  assert.equal(x.h.netEvents.size,0);
  /* a repeat of the same state is not a transition */
- x.h.netEvent(7,3,4); x.h.netEvent(7,3,4);
+ x.h.netEventRaw(7,3,4); x.h.netEventRaw(7,3,4);
  assert.equal(x.h.pumpNetEvent(),true);
  assert.equal(x.h.pumpNetEvent(),false);
 });
 test('bounded ring keeps 8 distinct handles and evicts the oldest',{skip:!process.env.ASTER_NET_EVENT_APP},t=>{
  const x=setup(t);
- for(let i=0;i<12;i++)x.h.netEvent(100+i,5,4);
+ for(let i=0;i<12;i++)x.h.netEventRaw(100+i,5,4);
  assert.equal(x.h.netEvents.size,8);
  assert.ok(!x.h.netEvents.has(100),'oldest evicted');
  assert.ok(x.h.netEvents.has(111),'newest kept');
@@ -50,7 +51,7 @@ test('event is delivered before FRAME with SYS code 3 and handle/state only',{sk
  const x=setup(t);
  const u=Buffer.from(`http://127.0.0.1:${srv.address().port}/`);
  u.copy(x.h.bytes(100,u.length));
- const id=x.a.aster_http_request(1,100,u.length,0,0,0,0,5000,1024);
+ const id=x.n.aster_http_request(1,100,u.length,0,0,0,0,5000,1024);
  assert.ok(id>0);
  await until(()=>{x.h.tick();return x.h.delivered.some(e=>e.type===5);});
  const ev=x.h.delivered.find(e=>e.type===5);
@@ -61,5 +62,5 @@ test('event is delivered before FRAME with SYS code 3 and handle/state only',{sk
  /* the SYS event must precede the FRAME that carries it */
  const idxSys=x.h.delivered.indexOf(ev);
  assert.equal(x.h.delivered[idxSys+1].type,1,'FRAME follows the SYS event');
- x.a.aster_http_close(id);
+ x.n.aster_http_close(id);
 });

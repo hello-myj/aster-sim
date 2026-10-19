@@ -30,9 +30,9 @@ test('ASTP truncation, malicious paths and ABI mismatch fail before instantiatio
   for (const s of ['../a', 'a/../b', 'a\\b', '/abs', 'C:ads', 'a/.. /b', 'a/NUL.txt', 'a./b']) assert.equal(validRelative(s), false, s);
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'aster-pkg-test-')); t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const original = packageFixture(), corrupt = path.join(root, 'bad.ast');
-  fs.writeFileSync(corrupt, original); const pkg = loadPackage(corrupt); assert.equal(pkg.manifest.abi.min, '3.6'); assert.equal(pkg.hasAot, false);
+  fs.writeFileSync(corrupt, original); const pkg = loadPackage(corrupt); assert.equal(pkg.manifest.abi.min, '4.0'); assert.equal(pkg.hasAot, false);
   fs.writeFileSync(corrupt, original.subarray(0, original.length - 100)); assert.throws(() => loadPackage(corrupt), /bounds/);
-  const bad = Buffer.from(original); const mo = bad.readUInt32LE(12), ml = bad.readUInt32LE(16); const text = bad.toString('utf8', mo, mo + ml).replace('"3.6"', '"4.6"'); bad.write(text, mo);
+  const bad = Buffer.from(original); const mo = bad.readUInt32LE(12), ml = bad.readUInt32LE(16); const text = bad.toString('utf8', mo, mo + ml).replace('"4.0"', '"4.6"'); bad.write(text, mo);
   fs.writeFileSync(corrupt, bad); assert.throws(() => loadPackage(corrupt), /ABI/);
 });
 test('all public ABI 3.7 aster imports have an explicit handler', t => {

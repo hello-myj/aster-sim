@@ -9,7 +9,7 @@ function wasmFixture(eventBody = [0,0x0b]) {
   section(7,exports); section(10,[2,4,0,0x41,0,0x0b,eventBody.length,...eventBody]); return Buffer.from(bytes);
 }
 function packageFixture(wasm = wasmFixture()) {
-  const manifest=Buffer.from(JSON.stringify({id:'test.fixture',abi:{min:'3.6'},permissions:[]}));
+  const manifest=Buffer.from(JSON.stringify({id:'test.fixture',abi:{min:'4.0'},permissions:[]}));
   const offset=(64+manifest.length+3)&~3, b=Buffer.alloc(offset+wasm.length);
   b.write('ASTP'); b.writeUInt16LE(1,4); b.writeUInt16LE(64,6);
   b.writeUInt32LE(64,12); b.writeUInt32LE(manifest.length,16);

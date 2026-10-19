@@ -40,8 +40,8 @@ test('IMU validates before writing and reports missing/invalid channels',t=>{
  h.gyro=[1e100,0,0];assert.equal(api.aster_imu_read(p,48),-7);
  h.gyro=[0,0,0];assert.equal(api.aster_imu_read(p,48),0);assert.equal(h.u32(p+16),1);
 });
-test('external SDK ABI 3.7 imucube responds to six-axis motion',{skip:!process.env.ASTER_SIM_IMUCUBE_AST},t=>{
- const pkg=loadPackage(process.env.ASTER_SIM_IMUCUBE_AST);assert.equal(pkg.manifest.abi.min,'3.7');
+test('external SDK imucube responds to six-axis motion',{skip:!process.env.ASTER_SIM_IMUCUBE_AST},t=>{
+ const pkg=loadPackage(process.env.ASTER_SIM_IMUCUBE_AST);assert.equal(pkg.manifest.abi.min,'4.0');
  const h=new Host(pkg);let clock=100;h.now=()=>clock;h.start();t.after(()=>h.stop());
  for(let i=0;i<4;i++){clock+=34;h.tick();}
  const initial=h.screen.toBuffer('image/png');assert.ok(h.presentCount>0);

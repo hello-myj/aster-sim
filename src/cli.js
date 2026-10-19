@@ -97,9 +97,11 @@ async function main(opts) {
     ws.on('message', b => { try { const msg = JSON.parse(b.toString()); if (msg.type === 'stop') { worker.postMessage(msg); return; } if (['touch', 'key', 'sensor', 'pause', 'reset', 'audio-feedback'].includes(msg.type)) worker.postMessage(msg); } catch { ws.close(1003); } });
   });
   if (!opts.headless) { await new Promise((resolve, reject) => { server.once('error', reject); server.listen(opts.port, '127.0.0.1', resolve); }); const url = `http://127.0.0.1:${server.address().port}/#${token}`; console.log(`aster-sim GUI: ${url}`); if (!opts.noOpen) openWindow(url, opts); }
-  const watchdog = setInterval(() => { if (Date.now() - last > opts.watchdog * 1000) { const error=`WASM callback blocked >${opts.watchdog}s; terminated`;console.error(error);if(opts.diagnosticsFile)fs.writeFileSync(opts.diagnosticsFile,JSON.stringify({error,code:1,diagnostics:lastDiagnostics,...provenance},null,2)+'\n'); cleanup(1); } }, 500);
+  let watchdogArmed = false;
+  const watchdog = setInterval(() => { if (!watchdogArmed || Date.now() - last <= opts.watchdog * 1000) return; const error=`WASM callback blocked >${opts.watchdog}s; terminated`;console.error(error);if(opts.diagnosticsFile)fs.writeFileSync(opts.diagnosticsFile,JSON.stringify({error,code:1,diagnostics:lastDiagnostics,...provenance},null,2)+'\n'); cleanup(1); }, 500);
   worker = new Worker(path.join(__dirname, 'worker.js'), { workerData: opts });
   worker.on('message', msg => {
+    if (!watchdogArmed) { watchdogArmed = true; last = Date.now(); }
     if(msg.diagnostics)lastDiagnostics=msg.diagnostics;
     if (['heartbeat', 'ready', 'done'].includes(msg.type)) last = Date.now();
     if (msg.type === 'ready') { info = { ...msg, scale: opts.scale, wifi: !!opts.wifi }; console.log(`Running ${msg.manifest.id}: ${msg.width}x${msg.height}, WASM (AOT ${msg.hasAot ? 'ignored' : 'absent'})`); }
