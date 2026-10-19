@@ -32,11 +32,11 @@ class Mqtt {
     s.error=error;while(s.operations.length)this.complete(s,error);
     for(const f of s.filters.values())f.active=false;
     s.input=Buffer.alloc(0);s.ping=0;s.socket?.destroy();s.resolver?.cancel();
-    if(s.o.reconnect&&!permanent){s.state=5;s.retry=Date.now()+s.backoff;s.backoff=Math.min(30000,s.backoff*2);}else s.state=6;
+    if(s.o.reconnect&&!permanent){this.mark(s,5);s.retry=Date.now()+s.backoff;s.backoff=Math.min(30000,s.backoff*2);}else this.mark(s,6);
   }
   begin(s){
     if(s.closing||s.socket||s.resolving)return;
-    s.state=1;s.deadline=Date.now()+s.o.timeout;s.input=Buffer.alloc(0);s.ping=0;
+    this.mark(s,1);s.deadline=Date.now()+s.o.timeout;s.input=Buffer.alloc(0);s.ping=0;
     const lookup=(hostname,options,done)=>{
       s.resolving=true;s.resolver=new dns.Resolver();s.resolver.resolve4(hostname,(e,ips)=>{s.resolving=false;s.resolver=null;
         if(s.closing||s.state>=5){this.release(s);done(fail('ECANCELED'));return;}
@@ -46,8 +46,8 @@ class Mqtt {
       ...(s.o.tls?{ca:this.ca,rejectUnauthorized:true,minVersion:'TLSv1.2',maxVersion:'TLSv1.2',...(net.isIP(s.o.host)?{}:{servername:s.o.host}),checkServerIdentity:(_h,c)=>tls.checkServerIdentity(s.o.host,c)}:{})};
     const socket=s.socket=(s.o.tls?tls.connect:net.connect)(options);
     socket.setNoDelay(true);
-    if(s.o.tls)socket.on('connect',()=>{if(!s.closing&&s.state===1)s.state=2;});
-    socket.once(s.o.tls?'secureConnect':'connect',()=>{if(s.closing||s.state>=5)return; s.state=3;this.write(s,codec.connect(s.o));});
+    if(s.o.tls)socket.on('connect',()=>{if(!s.closing&&s.state===1)this.mark(s,2);});
+    socket.once(s.o.tls?'secureConnect':'connect',()=>{if(s.closing||s.state>=5)return; this.mark(s,3);this.write(s,codec.connect(s.o));});
     socket.on('readable',()=>this.tick(s));socket.on('drain',()=>this.tick(s));
     socket.on('end',()=>this.finish(s,-23));
     socket.on('error',e=>{if(s.closing)return;
@@ -67,7 +67,7 @@ class Mqtt {
     s.operations.push({kind,topic,qos,wire,id,seq,auto,sent:0});return seq;
   }
   packet(s,p){
-    if(s.state===3){if(p.type!==2)throw fail();s.connack=p.code;if(p.code){this.finish(s,-4,true);return true;}s.state=4;s.error=0;s.backoff=1000;return true;}
+    if(s.state===3){if(p.type!==2)throw fail();s.connack=p.code;if(p.code){this.finish(s,-4,true);return true;}this.mark(s,4);s.error=0;s.backoff=1000;return true;}
     if(s.state!==4||p.type===2)throw fail();
     if(p.type===13){if(!s.ping)throw fail();s.ping=0;return true;}
     if(p.type===3){if(s.messages.length===2||p.qos&&s.socket.writableLength)return false;
@@ -99,6 +99,8 @@ class Mqtt {
       if(!s.ping&&now-s.lastTx>=s.o.keepalive*1000&&this.write(s,Buffer.from([0xc0,0])))s.ping=now;
     }catch(e){this.finish(s,mapped(e),true);}
   }
+  /* N5.5: coalesced state notification for this APP-owned client. */
+  mark(s,st){if(s.state===st)return;s.state=st;this.host.netEvent(s.id,4,st);}
   status(h,p,size){if(this.gate())return this.gate();if((size>>>0)<64)return -1;const out=this.bytes(p,64),s=this.slots.get(h>>>0);if(!s)return -10;
     out.fill(0);[64,1,s.state,s.error,s.reconnects,s.messages.length,s.operations.length,[...s.filters.values()].filter(f=>f.active).length,s.received,s.sent,s.connack,s.last,s.lastKind,s.lastError,s.cert,0].forEach((v,i)=>out.writeUInt32LE(v>>>0,i*4));return 0;}
   publish(h,p,n,d,length,qos,retain){if(this.gate())return this.gate();[h,p,n,d,length,qos,retain]=[h,p,n,d,length,qos,retain].map(x=>x>>>0);if(length>1024)return -20;if(qos>1||retain>1)return -1;

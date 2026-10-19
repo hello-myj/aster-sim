@@ -42,11 +42,12 @@ class Ws {
   gate(){return !this.host?-12:!this.host.permissions.has('net')?-4:!this.host.features.has(20)?-3:0;}
   bytes(p,n){return this.host.network.bytes(p,n);}
   static terminal(s){return s.state>=6;}
+  mark(s,st){if(s.state===st)return;s.state=st;this.host.netEvent(s.id,5,st);}
   drop(s){if(s.freed)return;s.freed=true;live.delete(s);}
   fault(s,error){if(s.closing||Ws.terminal(s))return;
     /* Completed messages stay deliverable through the terminal state, exactly
      * as the firmware recv checks the buffered message before the error. */
-    s.state=7;s.error=error;s.sending=undefined;s.pending=false;
+    this.mark(s,7);s.error=error;s.sending=undefined;s.pending=false;
     try{s.client?.terminate();}catch{}s.socket=null;this.drop(s);}
   connect(p,n,timeout){
     if(this.gate())return this.gate();[p,n,timeout]=[p,n,timeout].map(x=>x>>>0);
@@ -64,7 +65,7 @@ class Ws {
   }
   begin(s){
     if(s.closing||Ws.terminal(s))return;
-    s.state=1;s.deadline=Date.now()+s.timeout;s.lastRx=Date.now();
+    this.mark(s,1);s.deadline=Date.now()+s.timeout;s.lastRx=Date.now();
     const lookup=(hostname,options,done)=>{
       if(hostname==='localhost'){done(null,options.all?[{address:'127.0.0.1',family:4}]:'127.0.0.1',4);return;}
       if(net.isIP(hostname)){done(null,options.all?[{address:hostname,family:4}]:hostname,4);return;}
@@ -81,9 +82,9 @@ class Ws {
         checkServerIdentity:(h,c)=>tls.checkServerIdentity(s.u.host,c)}:{})};
     const client=s.client=new WebSocket(target,options);
     client.on('socket',socket=>{s.socket=socket;
-      if(s.u.tls)socket.once('connect',()=>{if(!s.closing&&s.state===1)s.state=2;});
-      socket.once(s.u.tls?'secureConnect':'connect',()=>{if(!s.closing&&s.state<4)s.state=s.u.tls?2:3;});});
-    client.on('open',()=>{if(s.closing||Ws.terminal(s))return;s.state=4;s.error=0;s.lastRx=Date.now();});
+      if(s.u.tls)socket.once('connect',()=>{if(!s.closing&&s.state===1)this.mark(s,2);});
+      socket.once(s.u.tls?'secureConnect':'connect',()=>{if(!s.closing&&s.state<4)this.mark(s,s.u.tls?2:3);});});
+    client.on('open',()=>{if(s.closing||Ws.terminal(s))return;this.mark(s,4);s.error=0;s.lastRx=Date.now();});
     client.on('message',(data,isBinary)=>{s.lastRx=Date.now();
       if(s.closing||Ws.terminal(s))return;
       const buffer=Buffer.from(data),opcode=isBinary?2:1;
@@ -102,7 +103,7 @@ class Ws {
       if(code===1009)this.fault(s,-20);
       else if(code===1002||code===1007||code===1008)this.fault(s,-26);
       else if(code===1006)this.fault(s,-23);
-      else{s.state=6;s.error=0;s.close_code=code||1005;s.queue=s.queue.filter(()=>false);}});
+      else{this.mark(s,6);s.error=0;s.close_code=code||1005;s.queue=s.queue.filter(()=>false);}});
     client.on('unexpected-response',(_req,res)=>{res.destroy();this.fault(s,-26);});
     client.on('error',e=>{if(s.closing||Ws.terminal(s))return;
       const cert=certMap[e.code];

@@ -70,9 +70,11 @@ test('immediate HTTP close retains quota until native request teardown',async t=
 });
 test('HTTPS real verification, single TLS quota, failure recovery and APP stop',{skip:!certDir},async t=>{
  const read=n=>fs.readFileSync(path.join(certDir,n));
- const base=await server(t,(req,res)=>res.end('secure'),{key:read('server.key'),cert:read('server.pem'),minVersion:'TLSv1.2',maxVersion:'TLSv1.2'});
+ /* Negative case needs a certificate whose SAN deliberately excludes the
+  * loopback address, so resolving 127.0.0.1 must be rejected by name. */
+ const base=await server(t,(req,res)=>res.end('secure'),{key:read('loopback.key'),cert:read('loopback.pem'),minVersion:'TLSv1.2',maxVersion:'TLSv1.2'});
  const x=setup(t,{networkCA:path.join(certDir,'ca.pem')});
- // The local fixture has LAN SANs and a DNS SAN, not loopback: prove rejection.
+ // The loopback fixture's SAN has LAN IPs and a DNS name, not 127.0.0.1.
  let id=start(x,base);let got=await body(x,id);assert.equal(got.s.error,-28);assert.equal(got.s.cert,4);x.a.aster_http_close(id);await delay();
  const lan=process.env.ASTER_HTTP_TEST_HOST;
  assert.ok(lan,'set ASTER_HTTP_TEST_HOST to the fixture LAN IP');

@@ -280,6 +280,25 @@ class Host {
     this.phase=name;this.send({type:'phase',diagnostics:{appId:this.manifest.id,phase:name,frame:this.frame,guestBytes:this.memory?.buffer.byteLength||0}});
     try{return this.instance?.exports[name]?.(...args);}catch(e){this.lastTrap={phase:name,message:e.message};throw e;}finally{this.trackMemory();}
   }
+  /* N5.5: coalesced network state notifications (one per handle, newest
+   * wins, at most 8 distinct handles; delivered one per frame before FRAME). */
+  netEvent(handle, kind, state) {
+    if (!this.netEvents) this.netEvents = new Map();
+    if (this.netEvents.size >= 8 && !this.netEvents.has(handle)) {
+      const oldest = this.netEvents.keys().next().value; this.netEvents.delete(oldest);
+    }
+    const prev = this.netEvents.get(handle);
+    if (prev && prev.kind === kind && prev.state === state) return; /* no transition */
+    this.netEvents.set(handle, { kind, state });
+  }
+  pumpNetEvent() {
+    if (!this.netEvents || !this.netEvents.size || this.exitCode !== null) return false;
+    const [handle, v] = this.netEvents.entries().next().value;
+    this.netEvents.delete(handle);
+    /* SYS(5) code=3 ASTER_SYS_NET_STATE, value=handle, data[2]=kind, data[3]=state */
+    this.event(5, [3, handle, v.kind, v.state]);
+    return true;
+  }
   event(type, payload = []) {
     if (this.exitCode !== null || this.paused) return;
     const p = this.eventPtr; this.bytes(p, 56).fill(0); this.u32(p, 56); this.u32(p + 4, 1); this.u32(p + 8, type); this.bytes(p + 16, 8).writeBigUInt64LE(BigInt(this.now())); payload.forEach((v, i) => this.u32(p + 24 + i * 4, v)); this.call('aster_app_event', p);
@@ -290,6 +309,7 @@ class Host {
       if (t.repeat) t.due = this.now() + t.period; else this.handles.delete(id);
       this.event(3, [id, t.user]); if (this.exitCode !== null) return;
     }
+    if (this.pumpNetEvent() && this.exitCode !== null) return;
     const started=performance.now();
     try{this.event(1, [this.frame++]);}finally{const ms=performance.now()-started;this.metrics.frameSamples++;this.metrics.frameTotalMs+=ms;this.metrics.frameMaxMs=Math.max(this.metrics.frameMaxMs,ms);this.metrics.frameMs.push(ms);if(this.metrics.frameMs.length>512)this.metrics.frameMs.shift();}
   }

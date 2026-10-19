@@ -19,7 +19,9 @@ class Http {
   gate(){return !this.host?-12:!this.host.permissions.has('net')?-4:!this.host.features.has(16)?-3:0;}
   bytes(p,n){return this.host.network.bytes(p,n);}
   text(p,n,max,optional=false){if(!n){if(optional&&!p)return '';throw error('EINVAL');}if(n>max)throw error('EINVAL');const b=this.bytes(p,n);if(b.includes(0)||[...b].some(x=>x>127))throw error('EINVAL');return b.toString('ascii');}
-  finish(s,state,err=0){if(s.closing||s.state>=6)return;s.state=state;s.error=err;clearTimeout(s.timer);if(state!==6){s.resolver?.cancel();s.req?.destroy();}}
+  /* N5.5: report each state change to the host's coalescing ring. */
+  mark(s,st){if(s.state===st)return;s.state=st;this.host.netEvent(s.id,3,st);}
+  finish(s,state,err=0){if(s.closing||s.state>=6)return;this.mark(s,state);s.error=err;clearTimeout(s.timer);if(state!==6){s.resolver?.cancel();s.req?.destroy();}}
   release(s){if(s.closing&&!s.socket&&!s.resolving&&!s.pending)live.delete(s);}
   close(s){if(!s)return -10;s.closing=true;this.slots.delete(s.id);clearTimeout(s.timer);s.queue=Buffer.alloc(0);s.resolver?.cancel();s.req?.destroy();this.release(s);return 0;}
   stop(){for(const s of [...this.slots.values()])this.close(s);this.host=null;}
@@ -38,7 +40,7 @@ class Http {
   }
   begin(s){
     if(s.closing||s.state>=6)return;
-    const secure=s.u.protocol==='https:';s.state=1;
+    const secure=s.u.protocol==='https:';this.mark(s,1);
     const lookup=(hostname,options,done)=>{
       s.resolving=true;s.resolver=new dns.Resolver();s.resolver.resolve4(hostname,(e,ips)=>{
         s.resolving=false;s.resolver=null;const ip=ips?.[0];
@@ -70,7 +72,7 @@ class Http {
       s.hasLength=res.headers['content-length']!==undefined;s.length=s.hasLength?BigInt(res.headers['content-length']):0n;
       if([204,304].includes(code)){s.hasLength=true;s.length=0n;}
       if(s.method!=='HEAD'&&s.hasLength&&s.length>BigInt(s.limit)){this.finish(s,7,-20);return;}
-      s.state=5;
+      this.mark(s,5);
       res.on('readable',()=>this.pump(s));
       res.on('end',()=>{if(res.rawTrailers.length/2+s.headers.length>32){this.finish(s,7,-20);return;}
         for(let i=0;i<res.rawTrailers.length;i+=2){const k=res.rawTrailers[i],v=res.rawTrailers[i+1];if(!token.test(k)||/^(content-length|transfer-encoding|host|connection|trailer)$/i.test(k)||/[^\x09\x20-\x7e]/.test(v)){this.finish(s,7,-26);return;}s.headers.push([k,v]);}
@@ -78,8 +80,8 @@ class Http {
         this.finish(s,6);});
       res.on('error',()=>this.finish(s,7,-26));res.on('aborted',()=>this.finish(s,7,-26));this.pump(s);
     });
-    req.on('socket',socket=>{s.socket=socket;socket.on('connect',()=>{if(s.state<6)s.state=secure?2:3;});
-      if(secure)socket.on('secureConnect',()=>{if(s.state<6)s.state=3;});
+    req.on('socket',socket=>{s.socket=socket;socket.on('connect',()=>{if(s.state<6)this.mark(s,secure?2:3);});
+      if(secure)socket.on('secureConnect',()=>{if(s.state<6)this.mark(s,3);});
       socket.on('close',()=>{if(s.socket===socket)s.socket=null;if(s.redirectPending){s.redirectPending=false;this.begin(s);}this.release(s);});});
     // ClientRequest assigns/emits its socket asynchronously. Keep admission
     // until close even when the APP closes before that event was delivered.
@@ -90,7 +92,7 @@ class Http {
       const cert={CERT_HAS_EXPIRED:1,CERT_REVOKED:2,ERR_TLS_CERT_ALTNAME_INVALID:4,UNABLE_TO_VERIFY_LEAF_SIGNATURE:8,SELF_SIGNED_CERT_IN_CHAIN:8,DEPTH_ZERO_SELF_SIGNED_CERT:8,UNABLE_TO_GET_ISSUER_CERT_LOCALLY:8,CERT_NOT_YET_VALID:16}[e.code];
       if(cert||/CERT|ISSUER|INVALID_CA|SELF_SIGNED/.test(e.code||'')){s.cert=cert||64;this.finish(s,7,-28);}else this.finish(s,7,e.code?.startsWith('ERR_SSL_')||e.code?.startsWith('ERR_TLS_')?-27:mapped(e));
     });
-    req.on('finish',()=>{if(s.state<6&&(!secure||s.socket?.authorized))s.state=4;});
+    req.on('finish',()=>{if(s.state<6&&(!secure||s.socket?.authorized))this.mark(s,4);});
     req.end(s.body);
   }
   pump(s){if(s.closing||s.state>=6||!s.res)return;const n=Math.min(2048-s.queue.length,s.res.readableLength);if(n<=0){if(s.queue.length<2048)s.res.read(0);return;}

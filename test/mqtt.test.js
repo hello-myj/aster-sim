@@ -67,6 +67,10 @@ test('actual SDK MQTT Echo APP imports, content, rendering and stop cleanup',{sk
 const certDir=process.env.ASTER_MQTT_TEST_CERTS;
 test('MQTTS real trust/name rejection, shared HTTPS TLS lease and recovery',{skip:!certDir},async t=>{
  const read=n=>fs.readFileSync(path.join(certDir,n));
+ /* server.pem carries DNS:localhost so the trust/recovery cases can connect,
+  * and LAN IPs so ASTER_HTTP_TEST_HOST works too. The last case uses no CA at
+  * all: the chain cannot be verified, so it must fail with the certificate
+  * error regardless of SAN. */
  const peer=await broker(t,0,{key:read('server.key'),cert:read('server.pem'),minVersion:'TLSv1.2',maxVersion:'TLSv1.2'});
  const x=setup(t,{networkCA:path.join(certDir,'ca.pem')});
  let h=open(x,peer.port,1,'localhost');await until(()=>state(x,h)===4);
