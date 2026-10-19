@@ -10,7 +10,7 @@ const { WebSocketServer, WebSocket } = require('ws');
 const compatibility = require('./sdk-compat.json');
 const { validateReplay } = require('./replay');
 const version = '0.2.0';
-const help = `aster-sim ${version} — Aster ABI 3.12 WASM APP simulator
+const help = `aster-sim ${version} — Aster ABI 4.0 WASM APP simulator
 Usage: aster-sim APP.ast [--resolution 240x320] [options]
   --width N --height N    Window size; manifest orientation applies. This is the glass.
   --scale N              Window display scale (default 2; APP pixels unchanged)
