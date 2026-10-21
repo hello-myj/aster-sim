@@ -13,7 +13,7 @@ function validateReplay(value) {
   for(const [index,e] of value.events.entries()){
     if(!e||typeof e!=='object')throw Error('Invalid replay event '+index);
     if(!integer(e.frame,0,value.frames-1)||e.frame<prior)throw Error('Replay event frames must be ordered and inside the run');prior=e.frame;
-    if(e.type==='touch'){if(!integer(e.x,0,2047)||!integer(e.y,0,2047)||![1,2,3].includes(e.action))throw Error('Invalid replay touch');}
+    if(e.type==='touch'){if(!integer(e.x,0,2047)||!integer(e.y,0,2047)||![1,2,3].includes(e.action)||(e.slot!==undefined&&!integer(e.slot,0,1)))throw Error('Invalid replay touch');}
     else if(e.type==='key'){if(!integer(e.code,1,767)||typeof e.pressed!=='boolean')throw Error('Invalid replay key');}
     else if(e.type==='sensor'){if(!['accel','gyro'].some(k=>e[k]!==undefined)||['accel','gyro'].some(k=>e[k]!==undefined&&(!Array.isArray(e[k])||e[k].length!==3||!e[k].every(Number.isFinite))))throw Error('Invalid replay sensor');}
     else if(e.type==='sensor-noise'){if(!Number.isFinite(e.amplitude)||e.amplitude<0||e.amplitude>1000)throw Error('Invalid sensor noise amplitude');}

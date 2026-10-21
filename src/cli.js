@@ -8,6 +8,7 @@ const { Worker } = require('node:worker_threads');
 const { spawn } = require('node:child_process');
 const { WebSocketServer, WebSocket } = require('ws');
 const compatibility = require('./sdk-compat.json');
+const { stopWorker } = require('./worker-stop');
 const { validateReplay } = require('./replay');
 const version = '0.2.0';
 const help = `aster-sim ${version} — Aster ABI 4.0 WASM APP simulator
@@ -74,7 +75,7 @@ async function main(opts) {
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://localhost');
     if (req.method !== 'GET') { res.writeHead(405).end(); return; }
-    if (url.pathname === '/audio.js') { res.setHeader('Content-Type', 'text/javascript; charset=utf-8'); res.setHeader('Cache-Control', 'no-store'); res.end(fs.readFileSync(path.join(__dirname, '../web/audio.js'))); return; }
+    if (url.pathname === '/audio.js' || url.pathname === '/touch.js') { res.setHeader('Content-Type', 'text/javascript; charset=utf-8'); res.setHeader('Cache-Control', 'no-store'); res.end(fs.readFileSync(path.join(__dirname, '../web', url.pathname.slice(1)))); return; }
     if (url.pathname === '/') {
       res.setHeader('Content-Type', 'text/html; charset=utf-8'); res.setHeader('Cache-Control', 'no-store');
       res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' blob: data:; media-src blob:; connect-src 'self'");
@@ -89,7 +90,7 @@ async function main(opts) {
     sockets.handleUpgrade(req, socket, head, ws => sockets.emit('connection', ws, req));
   });
   const broadcast = msg => { const data = JSON.stringify(msg); for (const ws of sockets.clients) if (ws.readyState === WebSocket.OPEN && ws.bufferedAmount < 2 * 1024 * 1024) ws.send(data); };
-  const cleanup = async code => { if (done) return; done = true; clearInterval(watchdog); await worker?.terminate(); for (const ws of sockets.clients) ws.close(); sockets.close(); server.close(); process.exitCode = Math.max(0, Math.min(255, code)); };
+  const cleanup = async (code, graceful = false) => { if (done) return; done = true; clearInterval(watchdog); await stopWorker(worker, graceful); for (const ws of sockets.clients) ws.close(); sockets.close(); server.close(); process.exitCode = Math.max(0, Math.min(255, code)); };
   sockets.on('connection', ws => {
     if (info) ws.send(JSON.stringify(info)); if (frame) ws.send(JSON.stringify({ type: 'frame', data: frame }));
     for (const msg of effectReplay.values()) ws.send(JSON.stringify(msg));
@@ -111,7 +112,7 @@ async function main(opts) {
     if (msg.type === 'audio' && msg.op === 'effect-load') effectReplay.set(msg.handle, msg);
     if (msg.type === 'audio' && msg.op === 'effect-unload') effectReplay.delete(msg.handle);
     if (msg.type === 'audio') { if (msg.op === 'start') audioReplay = [msg]; else if (msg.op === 'stop') audioReplay = []; else if (['volume', 'pause', 'resume', 'seek'].includes(msg.op) && audioReplay.length) { audioReplay.push(msg); if (audioReplay.length > 50) audioReplay.splice(1, 1); } }
-    if (msg.type === 'done') { if(opts.diagnosticsFile)fs.writeFileSync(opts.diagnosticsFile,JSON.stringify({...msg,...provenance},null,2)+'\n'); if (msg.error) console.error(msg.error); console.log(`Exit ${msg.code}; frames=${msg.frames || 0}, presents=${msg.presents || 0}`); broadcast(msg); cleanup(msg.code); return; }
+    if (msg.type === 'done') { if(opts.diagnosticsFile)fs.writeFileSync(opts.diagnosticsFile,JSON.stringify({...msg,...provenance},null,2)+'\n'); if (msg.error) console.error(msg.error); console.log(`Exit ${msg.code}; frames=${msg.frames || 0}, presents=${msg.presents || 0}`); broadcast(msg); cleanup(msg.code, true); return; }
     broadcast(msg.type === 'ready' ? info : msg);
   });
   worker.on('error', e => { console.error(e.stack); cleanup(1); });
