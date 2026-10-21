@@ -47,3 +47,9 @@ aster deploy <应用>.ast --target xtensa --port <串口> --run
 ```
 
 回放和诊断见 [docs/replay.md](docs/replay.md)。`--help` 列出全部参数。
+
+## 双触点输入（feature/multitouch）
+
+触屏浏览器支持两个 Pointer ID，映射为稳定 slot 0/1；鼠标仍是单指输入。丢失捕获、取消或窗口失焦会释放对应触点，暂停/恢复和停止会清空触点。事件保留 `u.touch.slot`；轮询每点12字节（x/y/action），不包含slot。
+
+确定性回放的touch事件可增加 `"slot": 1`，省略时保持slot0；同一frame可按数组顺序记录两个触点。示例为 SDK `apps/neon-duel/tests/two-touch.replay.json`。键盘组合不能替代双指验证；实体屏能力须分别在两款开发板验收。公开ABI仍4.0，兼容快照固定至 `src/sdk-compat.json` 中 `sdkCommit` 指定的SDK提交，尚未打包发布。

@@ -40,7 +40,7 @@ class Host {
     this.handles = new Map(); this.nextHandle = 1; this.freeBlocks = []; this.allocations = new Map();
     this.permissions = new Set(this.manifest.permissions || []);
     this.fps = 30; this.frame = 0; this.boot = performance.now(); this.exitCode = null; this.paused = false; this.stopped = false;
-    this.keys = new Set(); this.touch = null; this.logs = [];
+    this.keys = new Set(); this.touches = new Map(); this.logs = [];
     this.accel = options.accel || [0, 0, 9.80665]; this.gyro = options.gyro || [0, 0, 0];
     this.imuSample = null; this.imuSequence = 0;
     this.features = new Set([0, 1, 2, 3, 9, 10, 11, 12, 14]);
@@ -147,8 +147,14 @@ class Host {
         this.bytes(p + 24, 8).writeBigUInt64LE(1n << 2n);
         this.u32(p + 32, 60); this.u32(p + 36, this.width > this.height ? 1 : 0); this.u32(p + 44, this.width); this.u32(p + 48, this.height); return 0;
       },
-      aster_input_get_info: (p, n) => { if (!this.struct(p, n, 20)) return -1; this.u32(p + 8, 3); this.u32(p + 12, 1); return 0; },
-      aster_input_touch: (p, n) => { if (!n || !this.touch) return 0; this.bytes(p, 12); [this.touch.x, this.touch.y, this.touch.action].forEach((v, i) => this.u32(p + i * 4, v)); return 1; },
+      aster_input_get_info: (p, n) => { if (!this.struct(p, n, 20)) return -1; this.u32(p + 8, (this.features.has(1) ? 1 : 0) | (this.features.has(3) ? 2 : 0)); this.u32(p + 12, this.features.has(1) ? 2 : 0); return 0; },
+      aster_input_touch: (p, n) => {
+        const max = Math.min(n >>> 0, 2); if (!max) return 0;
+        this.bytes(p, max * 12); // Same three-u32 snapshot layout as firmware.
+        const points = [...this.touches.entries()].sort(([a], [b]) => a - b).slice(0, max);
+        points.forEach(([, point], index) => [point.x, point.y, 1].forEach((v, field) => this.u32(p + index * 12 + field * 4, v)));
+        return points.length;
+      },
       aster_input_keys_state: (p, n) => { const keys = [...this.keys].slice(0, n >>> 0); this.bytes(p, keys.length * 4); keys.forEach((v, i) => this.u32(p + i * 4, v)); return keys.length; },
       aster_timer_create: (period, repeat, user, out) => { if (period <= 0) return -1; this.bytes(out, 4); this.u32(out, this.add('timer', { period, repeat, user, due: this.now() + period }, 0x06000000)); return 0; },
       aster_timer_destroy: h => { this.get(h, 'timer'); this.handles.delete(h); return 0; },
@@ -317,13 +323,24 @@ class Host {
   }
   input(msg) {
     if (msg.type === 'audio-feedback') { this.audioFeedback(msg); return; }
-    if (msg.type === 'touch') { if (![1, 2, 3].includes(msg.action)) return; const m = this.mapTouch(msg.x, msg.y); this.touch = msg.action === 3 ? null : { x: m.x, y: m.y, action: msg.action }; this.event(2, [m.x, m.y, msg.action, 0]); }
+    if (msg.type === 'touch') {
+      const slot = msg.slot === undefined ? 0 : msg.slot;
+      if (this.paused || this.stopped || this.exitCode !== null || !this.features.has(1) ||
+          !Number.isInteger(slot) || slot < 0 || slot >= 2 || ![1, 2, 3].includes(msg.action) ||
+          !Number.isFinite(msg.x) || !Number.isFinite(msg.y)) return;
+      if (msg.action !== 1 && !this.touches.has(slot)) return;
+      const action = msg.action === 1 && this.touches.has(slot) ? 2 : msg.action;
+      const m = this.mapTouch(Math.max(0, Math.min(this.width - 1, Math.floor(msg.x))),
+                              Math.max(0, Math.min(this.height - 1, Math.floor(msg.y))));
+      if (action === 3) this.touches.delete(slot); else this.touches.set(slot, m);
+      this.event(2, [m.x, m.y, action, slot]);
+    }
     if (msg.type === 'key' && Number.isInteger(msg.code) && msg.code > 0 && msg.code < 768) { if (msg.pressed) this.keys.add(msg.code); else this.keys.delete(msg.code); this.event(4, [msg.code, msg.pressed ? 1 : 0]); }
     if (msg.type === 'sensor') { for (const name of ['accel', 'gyro']) if (Array.isArray(msg[name]) && msg[name].length === 3 && msg[name].every(Number.isFinite)) this[name] = msg[name]; }
     if (msg.type === 'pause') { this.setPaused(!this.paused); }
   }
-  setPaused(pause) { if (this.exitCode !== null || pause === this.paused) return; if (pause) { this.gfxFrame=null;this.call('aster_app_pause'); this.paused = true; this.pauseAt = this.now(); } else { const elapsed = this.now() - this.pauseAt; for (const t of this.handles.values()) if (t.kind === 'timer') t.due += elapsed; this.paused = false; this.call('aster_app_resume'); } this.keys.clear(); this.touch = null; }
-  stop() { if (this.stopped) return; this.stopped = true;this.gfxFrame=null; try { this.call('aster_app_stop'); } finally { try { this.call('aster_app_destroy'); } finally { this.ws.stop(); this.mqtt.stop(); this.http.stop(); this.network.stop(); for (const h of this.handles.values()) if (h.kind === 'file' && h.fd !== undefined) this.storageFs.closeSync(h.fd); this.handles.clear(); this.send({ type: 'audio', op: 'stop' }); } } }
+  setPaused(pause) { if (this.exitCode !== null || pause === this.paused) return; if (pause) { this.gfxFrame=null;this.call('aster_app_pause'); this.paused = true; this.pauseAt = this.now(); } else { const elapsed = this.now() - this.pauseAt; for (const t of this.handles.values()) if (t.kind === 'timer') t.due += elapsed; this.paused = false; this.call('aster_app_resume'); } this.keys.clear(); this.touches.clear(); }
+  stop() { if (this.stopped) return; this.stopped = true;this.gfxFrame=null;this.touches.clear();this.keys.clear(); try { this.call('aster_app_stop'); } finally { try { this.call('aster_app_destroy'); } finally { this.ws.stop(); this.mqtt.stop(); this.http.stop(); this.network.stop(); for (const h of this.handles.values()) if (h.kind === 'file' && h.fd !== undefined) this.storageFs.closeSync(h.fd); this.handles.clear(); this.send({ type: 'audio', op: 'stop' }); } } }
 }
 Object.assign(Host.prototype, require('./storage'), require('./libc'), require('./peripherals'));
 module.exports = { Host, E, errno };
