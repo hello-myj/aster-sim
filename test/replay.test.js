@@ -53,3 +53,17 @@ test('WASM Trap report preserves APP and failing callback after cleanup',t=>{
  const {wasmFixture}=require('./fixtures');const a=run(t,scenario(),packageFixture(wasmFixture([0,0,0x0b])));
  assert.equal(a.result.status,1);assert.equal(a.report.diagnostics.appId,'test.fixture');assert.equal(a.report.diagnostics.trap.phase,'aster_app_event');assert.match(a.report.diagnostics.trap.message,/unreachable/);
 });
+
+test('Windows repeatedly cleans native graphics after traps and allocation failures',
+ {skip:process.platform!=='win32'},t=>{
+ const {wasmFixture}=require('./fixtures');
+ for(let i=0;i<12;i++){
+  const trap=i%2===0;
+  const a=run(t,scenario(trap?{}:{faults:{allocation_fail_at:1}}),
+   trap?packageFixture(wasmFixture([0,0,0x0b])):undefined);
+  assert.equal(a.result.status,1,`iteration ${i}: ${a.result.stderr}`);
+  assert.equal(a.report.diagnostics.appId,'test.fixture');
+  if(trap)assert.equal(a.report.diagnostics.trap.phase,'aster_app_event');
+  else assert.match(a.report.error,/event buffer memory/);
+ }
+});

@@ -4,14 +4,14 @@ const fs = require('node:fs');
 const path = require('node:path');
 const http = require('node:http');
 const crypto = require('node:crypto');
-const { Worker } = require('node:worker_threads');
+const { createRuntimeWorker } = require('./worker-transport');
 const { spawn } = require('node:child_process');
 const { WebSocketServer, WebSocket } = require('ws');
 const compatibility = require('./sdk-compat.json');
 const { AudioReplay } = require('./audio-replay');
 const { stopWorker } = require('./worker-stop');
 const { validateReplay } = require('./replay');
-const version = '0.2.0';
+const version = require('../package.json').version;
 const help = `aster-sim ${version} — Aster ABI ${compatibility.abi} WASM APP simulator
 Usage: aster-sim APP.ast [--resolution 240x320] [options]
   --width N --height N    Window size; manifest orientation applies. This is the glass.
@@ -101,7 +101,7 @@ async function main(opts) {
   if (!opts.headless) { await new Promise((resolve, reject) => { server.once('error', reject); server.listen(opts.port, '127.0.0.1', resolve); }); const url = `http://127.0.0.1:${server.address().port}/#${token}`; console.log(`aster-sim GUI: ${url}`); if (!opts.noOpen) openWindow(url, opts); }
   let watchdogArmed = false;
   const watchdog = setInterval(() => { if (!watchdogArmed || Date.now() - last <= opts.watchdog * 1000) return; const error=`WASM callback blocked >${opts.watchdog}s; terminated`;console.error(error);if(opts.diagnosticsFile)fs.writeFileSync(opts.diagnosticsFile,JSON.stringify({error,code:1,diagnostics:lastDiagnostics,...provenance},null,2)+'\n'); cleanup(1); }, 500);
-  worker = new Worker(path.join(__dirname, 'worker.js'), { workerData: opts });
+  worker = createRuntimeWorker(path.join(__dirname, 'worker.js'), { workerData: opts });
   worker.on('message', msg => {
     if (!watchdogArmed) { watchdogArmed = true; last = Date.now(); }
     if(msg.diagnostics)lastDiagnostics=msg.diagnostics;

@@ -84,7 +84,9 @@ test('queued pre-unlock pause is preserved after enabling sound', async () => {
 test('external SDK 2048 loads 16 kHz effects and loops BGM', { skip: !process.env.ASTER_SIM_2048_AST }, t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'aster-2048-audio-')), sent = [];
   const pkg = loadPackage(process.env.ASTER_SIM_2048_AST);
-  const host = new Host(pkg, { state: root, send: m => sent.push(m) }).start();
+  let ms=0;
+  const host = new Host(pkg, { state: root, clock:()=>ms, send: m => sent.push(m) }).start();
+  const tick=(elapsed=17)=>{ms+=elapsed;host.tick();};
   t.after(() => { host.stop(); fs.rmSync(root, { recursive: true, force: true }); });
   assert.equal([...host.handles.values()].filter(h => h.kind === 'effect').length, 4);
   assert.equal(sent.filter(m => m.op === 'effect-load').length, 4);
@@ -93,16 +95,18 @@ test('external SDK 2048 loads 16 kHz effects and loops BGM', { skip: !process.en
   assert.equal(host.audio.total, 16000);
   for (const [x, y] of [[200, 100], [50, 200], [200, 300]]) {
     host.input({ type: 'touch', x: 120, y: 200, action: 1 });
-    host.input({ type: 'touch', x, y, action: 3 }); host.tick();
+    host.input({ type: 'touch', x, y, action: 3 }); tick();
   }
   assert.ok(sent.some(m => m.op === 'effect' && m.handle > 0));
   host.input({ type: 'audio-feedback', session: first.session, event: 'ended' });
-  assert.equal(host.audio.state, 0); host.tick();
+  // Effects can continue after music EOF. Advance the audio clock past
+  // these one-shots instead of relying on the speed of the test machine.
+  assert.equal(host.audio.state, 0); tick(3000);
   const starts = sent.filter(m => m.op === 'start');
   assert.equal(starts.length, 2); assert.notEqual(starts[1].session, first.session);
   host.input({ type: 'audio-feedback', session: first.session, event: 'ended' });
   assert.equal(host.audio.state, 1);
-  host.input({ type: 'audio-feedback', session: starts[1].session, event: 'ended' }); host.tick();
+  host.input({ type: 'audio-feedback', session: starts[1].session, event: 'ended' }); tick(3000);
   assert.equal(sent.filter(m => m.op === 'start').length, 3);
 });
 
