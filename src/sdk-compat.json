@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "abi": "4.0.0",
-  "sdkCommit": "64d9fdd2b02bf61950f696c5e8f3aee4dd4ebec7",
+  "abi": "4.1.0",
+  "sdkCommit": "6b9e9db20990404567b2692856f96c6f2ea80516",
   "imports": [
     "__cxa_allocate_exception",
     "__cxa_begin_catch",
@@ -18,6 +18,9 @@
     "aster_appmgr_uninstall",
     "aster_audio_effect_load",
     "aster_audio_effect_play",
+    "aster_audio_effect_play_ex",
+    "aster_audio_effect_set_params",
+    "aster_audio_effect_stop",
     "aster_audio_effect_unload",
     "aster_audio_get_info",
     "aster_audio_get_lyrics",
@@ -140,11 +143,11 @@
     "vsprintf"
   ],
   "contractHashes": {
-    "contract/api.json": "6b0a4019f646b2de0bc0c3d5d6d25654ec0d44f786884993710cf55e96cfb2e8",
+    "contract/api.json": "740a2510fd027b29e029838e43f2a4f17bd8691f635fc4dc896b02f26a302149",
     "include/aster/app.h": "9c067bce70ee9d969301975ec310b06c739d7f258136787a0039383ad1069ecf",
     "include/aster/appmgr.h": "77acde65e2cedad625c715e6e9c2814f604e2354a9e8a301e74def80072be64c",
     "include/aster/aster.h": "be4a92dbf78b958abe808586cc9fdf67436c1547901ad95bbd0f4bd110b4092e",
-    "include/aster/audio.h": "683b55330ee9099c83721242fdfbfc68206122e625ada3ad23130304cabadeaa",
+    "include/aster/audio.h": "d9bafb3b8a6a3bea18980176779c07ffb8789ba845d99cfc4fb719f4aadc678f",
     "include/aster/audio_stream.h": "53439e0f3931ded95fa8532d16dee143f52772b00c48b04ef570358f59d65547",
     "include/aster/camera.h": "1f0f719f1de70331454fe9743e5c4a3f5d37605ecff660b7a7dc1dff1f82d194",
     "include/aster/display.h": "324f406354060434933ef7020abeb86960a7abbd671036dc4856a41133d05962",
@@ -161,16 +164,16 @@
     "include/aster/kv.h": "b3be1a979044d53f25920e5a62b8990281e81888ef0e5e354302bfb68935f2ba",
     "include/aster/log.h": "8c5a616cd2d98f4b635592c5d7142c1c810b029868ef39e0cf3f39ace1319e9f",
     "include/aster/mqtt.h": "8b56dce7525b166b24721b982afc9311bd7676c7a37c08201002d97c440ac6a0",
+    "include/aster/net.h": "3339e9a0a88cbd4a8c4d33cae1ac8633051800ccf9b2c3864f75d923a66c3cca",
     "include/aster/network.h": "73ce69bbfd8de7c64e21ba25555e0e315bae679b2e56806d3504c6741be3b5b7",
     "include/aster/sensor.h": "5d8b2b6f211d1cb06d4e5378f0b083100ad48db40d068f6317ae61fb634aca72",
     "include/aster/surface.h": "8cd5d99b21da830c4945e652a2a5981dc844dcc0f06fa5af198dd144d21e54f8",
-    "include/aster/system.h": "f3bb98954649f4b8dee30dbd420f4ba7db8adca859a275b0866ee6e67962e062",
+    "include/aster/system.h": "9cb85d518b610e195f83af904eba8f3b91bbbcc739c75df4a62fd64d0c95a165",
     "include/aster/time.h": "6f6832715655566df7be77cc878634eb27ce202872bdc656319a680a4ce3e9a9",
     "include/aster/timer.h": "24bc78986dc054fa1cb1af45dc890cf2a046487349bcc33ccb915f23db4aad6a",
     "include/aster/types.h": "0cb93a2d20fd26f58d568584de694aa559a085d239f177b0d14a332ee3764ce2",
     "include/aster/wifi.h": "e9eada9ad04236fee948162054577144c001c2babc6a9516c1683c89d39125e3",
-    "include/aster/ws.h": "e8d11cf08158d4674b4a7ade620f1f950c898d367f70ed886b347185b59bc746",
-    "include/aster/net.h": "3339e9a0a88cbd4a8c4d33cae1ac8633051800ccf9b2c3864f75d923a66c3cca"
+    "include/aster/ws.h": "e8d11cf08158d4674b4a7ade620f1f950c898d367f70ed886b347185b59bc746"
   },
   "fontFaces": [
     {

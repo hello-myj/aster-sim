@@ -1,6 +1,6 @@
 # 回放
 
-用固定时钟、种子和输入运行一个包，并写出诊断。当前 ABI 为 4.0.0。回放执行 WASM，不连接真实网络。
+用固定时钟、种子和输入运行一个包，并写出诊断。当前 ABI 为 4.1.0。回放执行 WASM，不连接真实网络。
 
 ```bash
 node src/cli.js <应用>.ast --replay scenario.json --diagnostics report.json --screenshot final.png

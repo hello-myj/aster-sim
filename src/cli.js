@@ -8,10 +8,11 @@ const { Worker } = require('node:worker_threads');
 const { spawn } = require('node:child_process');
 const { WebSocketServer, WebSocket } = require('ws');
 const compatibility = require('./sdk-compat.json');
+const { AudioReplay } = require('./audio-replay');
 const { stopWorker } = require('./worker-stop');
 const { validateReplay } = require('./replay');
 const version = '0.2.0';
-const help = `aster-sim ${version} — Aster ABI 4.0 WASM APP simulator
+const help = `aster-sim ${version} — Aster ABI ${compatibility.abi} WASM APP simulator
 Usage: aster-sim APP.ast [--resolution 240x320] [options]
   --width N --height N    Window size; manifest orientation applies. This is the glass.
   --scale N              Window display scale (default 2; APP pixels unchanged)
@@ -70,7 +71,8 @@ async function main(opts) {
   if(opts.diagnosticsFile)fs.mkdirSync(path.dirname(opts.diagnosticsFile),{recursive:true});
   const hash=file=>crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
   const provenance={simulator:version,sdk:compatibility.sdkCommit,sdkWorkingTree:!!compatibility.sdkWorkingTree,abi:compatibility.abi,nodeVersion:process.version,platform:process.platform,arch:process.arch,dependencyLockSha256:hash(path.join(__dirname,'../package-lock.json')),sources:Object.fromEntries(fs.readdirSync(__dirname).filter(f=>f.endsWith('.js')).sort().map(f=>[f,hash(path.join(__dirname,f))])),packages:Object.fromEntries(opts.files.map(f=>{const target=fs.existsSync(f)&&fs.statSync(f).isDirectory()?path.join(f,'app.wasm'):f;return [f,fs.existsSync(target)&&fs.statSync(target).isFile()?hash(target):null];})),scenarioSha256:opts.replayFile?hash(opts.replayFile):null,peripheralInputs:Object.fromEntries(['camera','pcmInput','manifest'].filter(k=>opts[k]&&fs.existsSync(opts[k])).map(k=>[k,hash(opts[k])]))};
-  let info, frame, lastDiagnostics=null, done = false, worker, last = Date.now(), audioReplay = [], effectReplay = new Map();
+  let info, frame, lastDiagnostics=null, done = false, worker, last = Date.now();
+  const audioReplay = new AudioReplay();
   const token = crypto.randomBytes(24).toString('hex');
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://localhost');
@@ -93,8 +95,7 @@ async function main(opts) {
   const cleanup = async (code, graceful = false) => { if (done) return; done = true; clearInterval(watchdog); await stopWorker(worker, graceful); for (const ws of sockets.clients) ws.close(); sockets.close(); server.close(); process.exitCode = Math.max(0, Math.min(255, code)); };
   sockets.on('connection', ws => {
     if (info) ws.send(JSON.stringify(info)); if (frame) ws.send(JSON.stringify({ type: 'frame', data: frame }));
-    for (const msg of effectReplay.values()) ws.send(JSON.stringify(msg));
-    for (const msg of audioReplay) ws.send(JSON.stringify(msg));
+    for (const msg of audioReplay.messages()) ws.send(JSON.stringify(msg));
     ws.on('message', b => { try { const msg = JSON.parse(b.toString()); if (msg.type === 'stop') { worker.postMessage(msg); return; } if (['touch', 'key', 'sensor', 'pause', 'reset', 'audio-feedback'].includes(msg.type)) worker.postMessage(msg); } catch { ws.close(1003); } });
   });
   if (!opts.headless) { await new Promise((resolve, reject) => { server.once('error', reject); server.listen(opts.port, '127.0.0.1', resolve); }); const url = `http://127.0.0.1:${server.address().port}/#${token}`; console.log(`aster-sim GUI: ${url}`); if (!opts.noOpen) openWindow(url, opts); }
@@ -109,9 +110,7 @@ async function main(opts) {
     if (msg.type === 'log') console.log(`[${msg.ms}ms/${msg.level}] ${msg.message}`);
     if (msg.type === 'frame') { frame = Buffer.from(msg.data).toString('base64'); msg.data = frame; }
     if (msg.type === 'audio' && msg.data) msg.data = Buffer.from(msg.data).toString('base64');
-    if (msg.type === 'audio' && msg.op === 'effect-load') effectReplay.set(msg.handle, msg);
-    if (msg.type === 'audio' && msg.op === 'effect-unload') effectReplay.delete(msg.handle);
-    if (msg.type === 'audio') { if (msg.op === 'start') audioReplay = [msg]; else if (msg.op === 'stop') audioReplay = []; else if (['volume', 'pause', 'resume', 'seek'].includes(msg.op) && audioReplay.length) { audioReplay.push(msg); if (audioReplay.length > 50) audioReplay.splice(1, 1); } }
+    if (msg.type === 'audio') audioReplay.accept(msg);
     if (msg.type === 'done') { if(opts.diagnosticsFile)fs.writeFileSync(opts.diagnosticsFile,JSON.stringify({...msg,...provenance},null,2)+'\n'); if (msg.error) console.error(msg.error); console.log(`Exit ${msg.code}; frames=${msg.frames || 0}, presents=${msg.presents || 0}`); broadcast(msg); cleanup(msg.code, true); return; }
     broadcast(msg.type === 'ready' ? info : msg);
   });
