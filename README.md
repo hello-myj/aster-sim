@@ -1,6 +1,6 @@
 # aster-sim
 
-在电脑上运行 Aster 应用包。当前 ABI 为 4.0.0。模拟器执行 WASM，忽略包里的 Xtensa AOT，并拒绝主版本不是 4 的包。
+在电脑上运行 Aster 应用包。当前 ABI 为 4.1.0。模拟器执行 WASM，忽略包里的 Xtensa AOT，并拒绝主版本不是 4 的包。
 
 需要 Node.js 22。
 
@@ -52,4 +52,6 @@ aster deploy <应用>.ast --target xtensa --port <串口> --run
 
 触屏浏览器支持两个 Pointer ID，映射为稳定 slot 0/1；鼠标仍是单指输入。丢失捕获、取消或窗口失焦会释放对应触点，暂停/恢复和停止会清空触点。事件保留 `u.touch.slot`；轮询每点12字节（x/y/action），不包含slot。
 
-确定性回放的touch事件可增加 `"slot": 1`，省略时保持slot0；同一frame可按数组顺序记录两个触点。示例为 SDK `apps/neon-duel/tests/two-touch.replay.json`。键盘组合不能替代双指验证；实体屏能力须分别在两款开发板验收。公开ABI仍4.0，兼容快照固定至 `src/sdk-compat.json` 中 `sdkCommit` 指定的SDK提交，尚未打包发布。
+确定性回放的touch事件可增加 `"slot": 1`，省略时保持slot0；同一frame可按数组顺序记录两个触点。示例为 SDK `apps/neon-duel/tests/two-touch.replay.json`。键盘组合不能替代双指验证；实体屏能力须分别在两款开发板验收。多指保持 ABI 4.0 事件布局。当前连续音效版本为 ABI 4.1；快照绑定 SDK 公开契约提交，随 `sdk-v4.1.0` 正式开发包提供；最终打包元数据提交见 SDK 的 release.json。
+
+连续音效实现循环、音高/音量平滑、独立停止、暂停和晚连接浏览器状态回放。浏览器重新连接会从循环引入段重启，不保证与后台相位对齐。Windows 使用独立进程承载 APP 和原生画布，避免异常退出时线程隔离环境的访问异常，并保留 Trap 报告及看门狗强制终止能力。完整限制见 [音频说明](docs/continuous-audio.md)。

@@ -1,5 +1,6 @@
 'use strict';
 const fs = require('node:fs');
+const { wavEffect, EffectVoice } = require('./audio-effects');
 let nextAudioSession = 1;
 function wavInfo(b) {
   if (b.length < 12 || b.toString('ascii', 0, 4) !== 'RIFF' || b.toString('ascii', 8, 12) !== 'WAVE') return { duration: 0, size: b.length, wav: false };
@@ -26,10 +27,20 @@ module.exports = {
       a.state = 0; this.log(3, 'Audio output could not decode the background stream');
     }
   },
-  audioPosition() { const a = this.audio; const pos = a.position + (a.state === 1 ? this.now() - a.started : 0); if (a.total && pos >= a.total) { a.state = 0; a.position = a.total; return a.total; } return Math.floor(pos); },
+  audioPosition() { const a = this.audio; if (a.effectOnly && a.state === 1 && !this.effectsActive()) { a.state = 0; a.position = 0; } const pos = a.position + (a.state === 1 ? this.now() - a.started : 0); if (a.total && pos >= a.total) { a.state = 0; a.position = a.total; return a.total; } return Math.floor(pos); },
+  effectsActive() {
+    let active = false;
+    for (const h of this.handles.values()) if (h.kind === 'effect') { h.voice.sync(this.now()); active ||= h.voice.playing; }
+    return active;
+  },
+  suspendEffects(paused) {
+    for (const h of this.handles.values()) if (h.kind === 'effect') h.voice.suspend(paused, this.now());
+    this.send({ type: 'audio', op: 'effect-suspend', paused });
+  },
   audioImports() {
     const enabled = () => this.features.has(6);
-    const control = op => { if (!enabled()) return -16; const a = this.audio; a.position = this.audioPosition(); a.started = this.now(); if (op === 'pause') { if (a.state !== 1) return -12; a.state = 2; } if (op === 'resume') { if (a.state !== 2) return -12; a.state = 1; } if (op === 'stop') { a.state = 0; a.position = 0; } this.send({ type: 'audio', op }); return 0; };
+    const control = op => { if (!enabled()) return -16; const a = this.audio; if (!a.state && this.effectsActive()) { a.state = 1; a.total = a.bytes = a.position = 0; a.started = this.now(); a.effectOnly = true; } a.position = this.audioPosition(); a.started = this.now(); if (op === 'pause') { if (a.state !== 1) return -12; a.state = 2; } if (op === 'resume') { if (a.state !== 2) return -12; a.state = 1; } if (op === 'stop') { a.state = 0; a.position = 0; for (const h of this.handles.values()) if (h.kind === 'effect') h.voice.stop(0, this.now()); }
+      if (op === 'pause' || op === 'resume') this.suspendEffects(op === 'pause' || this.paused); this.send({ type: 'audio', op }); return 0; };
     return {
       // Optional ABI 3.10 capability is absent: no fake whole-file streaming.
       aster_audio_stream_open: () => -16,
@@ -43,6 +54,8 @@ module.exports = {
       aster_audio_start_file: (p, n) => {
         if (!enabled()) return -16; const data = this.readVirtual(p, n), info = wavInfo(data);
         if (!info.wav && !(data[0] === 0xff || data.toString('ascii', 0, 3) === 'ID3')) return -3;
+        for (const h of this.handles.values()) if (h.kind === 'effect') h.voice.stop(0, this.now());
+        this.send({ type: 'audio', op: 'stop' });
         this.audio = { session: nextAudioSession++, state: 1, total: info.duration, bytes: info.size, position: 0, started: this.now() };
         this.send({ type: 'audio', op: 'start', session: this.audio.session, data, volume: this.volume }); return 0;
       },
@@ -50,12 +63,44 @@ module.exports = {
       aster_audio_seek: ms => { if (!enabled()) return -16; if (!this.audio.state) return -12; if (this.audio.total && ms > this.audio.total) return -1; this.audio.position = ms >>> 0; this.audio.started = this.now(); this.send({ type: 'audio', op: 'seek', ms }); return 0; },
       aster_audio_get_state: (p, n) => {
         if (!enabled()) return -16; if (!this.struct(p, n, 32, 2)) return -1; const ms = this.audioPosition(), a = this.audio;
-        [a.state, a.bytes, a.total ? Math.floor(a.bytes * ms / a.total) : 0, this.volume, ms, a.total].forEach((v, i) => this.u32(p + 8 + i * 4, v)); return 0;
+        [a.state || (this.effectsActive() ? 1 : 0), a.bytes, a.total ? Math.floor(a.bytes * ms / a.total) : 0, this.volume, ms, a.total].forEach((v, i) => this.u32(p + 8 + i * 4, v)); return 0;
       },
       aster_audio_get_lyrics: () => enabled() ? 0 : -16,
-      aster_audio_effect_load: (p, n) => { if (!enabled()) return -16; const data = this.readVirtual(p, n), info = wavInfo(data); if (!info.native || info.size > 65536) return -3; if ([...this.handles.values()].filter(x => x.kind === 'effect').length >= 4) return -11; const handle = this.add('effect', { data }); this.send({ type: 'audio', op: 'effect-load', handle, data }); return handle; },
-      aster_audio_effect_play: h => { if (!enabled()) return -16; this.get(h, 'effect'); this.send({ type: 'audio', op: 'effect', handle: h, volume: this.volume }); return 0; },
-      aster_audio_effect_unload: h => { this.get(h, 'effect'); this.handles.delete(h); this.send({ type: 'audio', op: 'effect-unload', handle: h }); return 0; },
+      aster_audio_effect_load: (p, n) => {
+        if (!enabled()) return -16;
+        const data = this.readVirtual(p, n), info = wavEffect(data);
+        if ([...this.handles.values()].filter(x => x.kind === 'effect').length >= 4) return -2;
+        const voice = new EffectVoice(info); voice.paused = this.paused;
+        const handle = this.add('effect', { data, info, voice });
+        this.send({ type: 'audio', op: 'effect-load', handle, data, info }); return handle;
+      },
+      aster_audio_effect_play: h => {
+        if (!enabled()) return -16; if (this.audio.state === 2) return -12;
+        this.get(h, 'effect').voice.play({flags:0,start:0,end:0,fade:0,pitch:65536,gain:65536,ms:0}, this.now());
+        this.send({ type: 'audio', op: 'effect', handle: h, volume: this.volume }); return 0;
+      },
+      aster_audio_effect_play_ex: (h, p, n) => {
+        if (!enabled() || !this.features.has(21)) return -16; if (n !== 36) return -1;
+        const b = this.bytes(p,n), u = i => b.readUInt32LE(i * 4);
+        if (u(0) !== n || u(1) !== 1) return -1;
+        if (this.audio.state === 2) return -12;
+        const d = {flags:u(2),start:u(3),end:u(4),fade:u(5),pitch:u(6),gain:u(7),ms:u(8)};
+        const rc = this.get(h,'effect').voice.play(d,this.now());
+        if (!rc) this.send({ type:'audio',op:'effect',handle:h,desc:d,volume:this.volume }); return rc;
+      },
+      aster_audio_effect_set_params: (h, p, n) => {
+        if (!enabled() || !this.features.has(21)) return -16; if (n !== 20) return -1;
+        const b = this.bytes(p,n), u = i => b.readUInt32LE(i * 4);
+        if (u(0) !== n || u(1) !== 1) return -1;
+        const params = {pitch:u(2),gain:u(3),ms:u(4)}, rc = this.get(h,'effect').voice.change(params,this.now());
+        if (!rc) this.send({type:'audio',op:'effect-params',handle:h,params}); return rc;
+      },
+      aster_audio_effect_stop: (h, ms) => {
+        if (!enabled() || !this.features.has(21)) return -16;
+        const rc = this.get(h,'effect').voice.stop(ms >>> 0,this.now());
+        if (!rc) this.send({type:'audio',op:'effect-stop',handle:h,ms:ms >>> 0}); return rc;
+      },
+      aster_audio_effect_unload: h => { if (!enabled()) return -16; this.get(h, 'effect'); this.handles.delete(h); this.send({ type: 'audio', op: 'effect-unload', handle: h }); return 0; },
       aster_audio_record: (p, n) => { if (!this.pcmInput) return -16; if (n > this.pcmInput.length) return -11; this.bytes(p, n).set(this.pcmInput.subarray(0, n)); return n; },
     };
   },

@@ -54,7 +54,7 @@ class Host {
     this.netabi = new NetAbi(this);
     if (options.camera) { this.camera = decodeImage(fs.readFileSync(options.camera), 320, 240).canvas; this.features.add(4); }
     if (options.pcmInput) { this.pcmInput = fs.readFileSync(options.pcmInput); this.features.add(5); }
-    if (!options.noAudio) this.features.add(6);
+    if (!options.noAudio) { this.features.add(6); this.features.add(21); }
     for(const name of options.missingFeatures||[])this.features.delete(FEATURES[name]);
     this.volume = 70; this.audio = { state: 0, total: 0, bytes: 0, position: 0, started: this.now() };
     this.wifi = { ssid: '', state: 0, last: 0, saved: '' };
@@ -339,7 +339,7 @@ class Host {
     if (msg.type === 'sensor') { for (const name of ['accel', 'gyro']) if (Array.isArray(msg[name]) && msg[name].length === 3 && msg[name].every(Number.isFinite)) this[name] = msg[name]; }
     if (msg.type === 'pause') { this.setPaused(!this.paused); }
   }
-  setPaused(pause) { if (this.exitCode !== null || pause === this.paused) return; if (pause) { this.gfxFrame=null;this.call('aster_app_pause'); this.paused = true; this.pauseAt = this.now(); } else { const elapsed = this.now() - this.pauseAt; for (const t of this.handles.values()) if (t.kind === 'timer') t.due += elapsed; this.paused = false; this.call('aster_app_resume'); } this.keys.clear(); this.touches.clear(); }
+  setPaused(pause) { if (this.exitCode !== null || pause === this.paused) return; if (pause) { this.gfxFrame=null;this.call('aster_app_pause'); this.paused = true; this.pauseAt = this.now(); } else { const elapsed = this.now() - this.pauseAt; for (const t of this.handles.values()) if (t.kind === 'timer') t.due += elapsed; this.paused = false; this.call('aster_app_resume'); } this.keys.clear(); this.touches.clear(); this.suspendEffects(this.paused || this.audio.state === 2); }
   stop() { if (this.stopped) return; this.stopped = true;this.gfxFrame=null;this.touches.clear();this.keys.clear(); try { this.call('aster_app_stop'); } finally { try { this.call('aster_app_destroy'); } finally { this.ws.stop(); this.mqtt.stop(); this.http.stop(); this.network.stop(); for (const h of this.handles.values()) if (h.kind === 'file' && h.fd !== undefined) this.storageFs.closeSync(h.fd); this.handles.clear(); this.send({ type: 'audio', op: 'stop' }); } } }
 }
 Object.assign(Host.prototype, require('./storage'), require('./libc'), require('./peripherals'));

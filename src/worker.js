@@ -1,5 +1,6 @@
 'use strict';
-const { parentPort, workerData } = require('node:worker_threads');
+const { parentPort: threadPort, workerData: threadData } = require('node:worker_threads');
+function boot(parentPort, workerData) {
 const { loadPackage } = require('./package');
 const { Host } = require('./host');
 const fs = require('node:fs');
@@ -41,3 +42,11 @@ try {
   catalog = workerData.files.map(file => loadPackage(file, workerData)); start(catalog[0]);
   parentPort.on('message', msg => { try { if (msg.type === 'stop') finish(); else if(replay)return;else if (msg.type === 'reset') { clearTimeout(timeout); host.stop(); start(catalog[0]); } else host.input(msg); } catch (e) { finish(e); } });
 } catch (e) { finish(e); }
+
+}
+if (threadPort) boot(threadPort, threadData);
+else process.once('message', data => boot({
+  postMessage: message => process.send(message),
+  close: () => process.disconnect(),
+  on: (event, handler) => process.on(event, handler),
+}, data));
