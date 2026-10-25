@@ -2,7 +2,7 @@
   "name": "aster-sim",
   "version": "0.3.0",
   "private": true,
-  "description": "WASM APP simulator for Aster ABI 4.1",
+  "description": "WASM APP simulator for Aster ABI 4.2",
   "scripts": {
     "start": "node src/cli.js",
     "test": "node --test test/*.test.js",

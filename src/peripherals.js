@@ -74,6 +74,15 @@ module.exports = {
         const handle = this.add('effect', { data, info, voice });
         this.send({ type: 'audio', op: 'effect-load', handle, data, info }); return handle;
       },
+      aster_audio_effect_load_memory: (p,n) => {
+        if (!enabled() || !this.features.has(22)) return -16;
+        n >>>= 0; if (n<12 || n>69632) return -1;
+        const data=Buffer.from(this.bytes(p,n)),info=wavEffect(data);
+        if ([...this.handles.values()].filter(x=>x.kind==='effect').length>=4) return -2;
+        const voice=new EffectVoice(info);voice.paused=this.paused;
+        const handle=this.add('effect',{data,info,voice});
+        this.send({type:'audio',op:'effect-load',handle,data,info});return handle;
+      },
       aster_audio_effect_play: h => {
         if (!enabled()) return -16; if (this.audio.state === 2) return -12;
         this.get(h, 'effect').voice.play({flags:0,start:0,end:0,fade:0,pitch:65536,gain:65536,ms:0}, this.now());

@@ -54,7 +54,7 @@ class Host {
     this.netabi = new NetAbi(this);
     if (options.camera) { this.camera = decodeImage(fs.readFileSync(options.camera), 320, 240).canvas; this.features.add(4); }
     if (options.pcmInput) { this.pcmInput = fs.readFileSync(options.pcmInput); this.features.add(5); }
-    if (!options.noAudio) { this.features.add(6); this.features.add(21); }
+    if (!options.noAudio) { this.features.add(6); this.features.add(21); this.features.add(22); }
     for(const name of options.missingFeatures||[])this.features.delete(FEATURES[name]);
     this.volume = 70; this.audio = { state: 0, total: 0, bytes: 0, position: 0, started: this.now() };
     this.wifi = { ssid: '', state: 0, last: 0, saved: '' };
