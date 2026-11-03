@@ -49,6 +49,7 @@ class MemoryFS {
   }
   renameSync(from, to) { const n = this.node(from); this.parent(to); this.nodes.set(this.key(to), n); this.nodes.delete(this.key(from)); }
   unlinkSync(p) { if (this.node(p).dir) fail('EISDIR'); this.nodes.delete(this.key(p)); }
+  rmdirSync(p) { p=this.key(p);if(!this.node(p).dir)fail('ENOTDIR');if([...this.nodes.keys()].some(k=>k.startsWith(p+path.sep)))fail('ENOTEMPTY');this.nodes.delete(p); }
   readdirSync(p) {
     p = this.key(p); if (!this.node(p).dir) fail('ENOTDIR');
     return [...this.nodes].filter(([name]) => name !== p && path.dirname(name) === p).map(([name, n]) => ({ name: path.basename(name), isDirectory: () => n.dir }));

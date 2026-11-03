@@ -42,7 +42,7 @@ module.exports = {
       },
       aster_fs_close: h => { this.permission('fs'); const f = this.get(h, 'file'); if (f.fd !== undefined) fs.closeSync(f.fd); this.handles.delete(h); return 0; },
       aster_fs_mkdir: (p, n) => { const v = this.virtual(p, n, true); fs.mkdirSync(v.path); return 0; },
-      aster_fs_unlink: (p, n) => { const v = this.virtual(p, n, true); if (!v.rel) return -4; fs.unlinkSync(v.path); return 0; },
+      aster_fs_unlink: (p, n) => { const v = this.virtual(p, n, true); if (!v.rel) return -4; if(fs.statSync(v.path).isDirectory())fs.rmdirSync(v.path);else fs.unlinkSync(v.path); return 0; },
       aster_fs_stat: (p, n, out, size) => {
         const v = this.virtual(p, n); if (!this.struct(out, size, 24)) return -1;
         let length, directory;

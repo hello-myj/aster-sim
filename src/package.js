@@ -23,6 +23,9 @@ function loadPackage(file, options = {}) {
     file = path.join(file, 'app.wasm');
   }
   const b = fs.readFileSync(file);
+  return decodePackage(b, file, options);
+}
+function decodePackage(b, file = 'download.ast', options = {}) {
   let manifest, wasm, assets = new Map(), hasAot = false;
   if (b.subarray(0, 4).equals(Buffer.from([0, 97, 115, 109]))) {
     const mf = options.manifest || path.join(path.dirname(file), 'manifest.json');
@@ -69,4 +72,4 @@ function loadPackage(file, options = {}) {
   if (wasm.length < 8 || !wasm.subarray(0, 4).equals(Buffer.from([0, 97, 115, 109]))) throw Error('No portable WASM payload');
   return { file, manifest, wasm, assets, hasAot };
 }
-module.exports = { loadPackage, checkManifest, validRelative };
+module.exports = { loadPackage, decodePackage, checkManifest, validRelative };

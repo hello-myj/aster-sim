@@ -135,6 +135,14 @@ class Host {
   imports() {
     const a = {
       aster_system_get_abi_version: () => abiPacked,
+      aster_system_get_info: (p, n) => {
+        if (!this.struct(p, n, 128)) return -1;
+        this.u32(p+8,abiPacked);this.output(p+12,'simulator',16,true);
+        this.output(p+28,'aster.simulator',40,true);this.output(p+68,'portable-wasm',24,true);
+        this.u32(p+92,4);this.u32(p+100,1);
+        let flags=0n;for(const bit of this.features)flags|=1n<<BigInt(bit);
+        this.bytes(p+120,8).writeBigUInt64LE(flags);return 0;
+      },
       aster_system_has_feature: bit => this.features.has(bit) ? 1 : 0,
       aster_app_exit: code => { this.exitCode = code; },
       aster_app_set_framerate: fps => { this.fps = Math.min(fps >>> 0 || 30, 60); return 0; },
@@ -231,6 +239,15 @@ class Host {
       this.u32(p + 136, app.manifest.id === this.manifest.id ? (this.paused ? 2 : 1) : 0); this.u32(p + 140, app.hasAot ? 1 : 0); this.output(p + 148, app.manifest.category || '', 16, true); return 0;
     };
     a.aster_appmgr_start = (p, n) => { this.permission('appmgr'); const id = this.string(p, n); if (id === this.manifest.id) return -5; if (!(this.options.catalog || []).some(a => a.manifest.id === id)) return -6; this.switchTo = id; this.exitCode = 0; return 0; };
+    a.aster_appmgr_install = (p,n,r,rn) => {
+      this.permission('appmgr');this.permission('fs');this.permission('kv');
+      const program=this.virtual(p,n),resources=this.virtual(r,rn);
+      if(program.area!=='data'||resources.area!=='data'||this.pendingInstall)return -4;
+      this.pendingInstall={program:program.path,resources:resources.path};
+      const receipt=path.join(this.root,'kv',Buffer.from('store.install.result').toString('hex'));
+      const result=Buffer.alloc(4);result.writeInt32LE(-15);this.storageFs.writeFileSync(receipt,result);
+      this.switchTo=this.manifest.id;this.exitCode=0;return 0;
+    };
     a.aster_appmgr_uninstall = (p, n) => { this.permission('appmgr'); const id = this.string(p, n); if (id === this.manifest.id) return -5; const list = this.options.catalog || [], i = list.findIndex(a => a.manifest.id === id); if (i < 0) return -6; list.splice(i, 1); return 0; };
     this.apiNames = Object.keys(a).filter(x => x.startsWith('aster_'));
     const wrapped = {};
@@ -263,6 +280,38 @@ class Host {
     return 0;
   }
   sensor(p, n, values) { if (n < 12) return -1; values.forEach((v, i) => this.bytes(p + i * 4, 4).writeFloatLE(v)); return 0; }
+  completeInstall() {
+    if(!this.pendingInstall)return;
+    const vfs=this.storageFs,request=this.pendingInstall;this.pendingInstall=null;
+    let result=0;
+    try {
+      const {decodePackage,validRelative}=require('./package');
+      const installed=decodePackage(vfs.readFileSync(request.program),'download.ast',this.options);
+      if(installed.manifest.id===this.manifest.id)throw Object.assign(Error('Self update denied'),{code:'EPERM'});
+      for(const feature of installed.manifest.requires||[])if(!this.features.has(FEATURES[feature]))throw Object.assign(Error('Unsupported feature'),{code:'EINVAL'});
+      let count=0,total=0;
+      const collect=(base,prefix='',depth=0)=>{
+        if(depth>16)throw Object.assign(Error('Resource depth'),{code:'EINVAL'});
+        for(const ent of vfs.readdirSync(base,{withFileTypes:true})) {
+          const name=prefix+ent.name;if(!validRelative(name))throw Object.assign(Error('Resource path'),{code:'EPERM'});
+          const child=path.join(base,ent.name);
+          if(ent.isDirectory())collect(child,name+'/',depth+1);
+          else {
+            const content=vfs.readFileSync(child);count++;total+=content.length;
+            if(count>4096||total>1073741824||installed.assets.has(name))throw Object.assign(Error('Resource limit/collision'),{code:'EINVAL'});
+            installed.assets.set(name,Buffer.from(content));
+          }
+        }
+      };
+      collect(request.resources);
+      const catalog=this.options.catalog;
+      if(!catalog)throw Object.assign(Error('No catalog'),{code:'EINVAL'});
+      const old=catalog.findIndex(p=>p.manifest.id===installed.manifest.id);
+      if(old<0)catalog.push(installed);else catalog[old]=installed;
+    } catch(error) {result=errno(error);this.log(2,`Store install failed: ${error.message}`);}
+    const receipt=path.join(this.root,'kv',Buffer.from('store.install.result').toString('hex'));
+    const bytes=Buffer.alloc(4);bytes.writeInt32LE(result);vfs.writeFileSync(receipt,bytes);
+  }
   start() {
     const module = new WebAssembly.Module(this.pkg.wasm), imports = this.imports();
     for (const i of WebAssembly.Module.imports(module)) if (i.module !== 'env' || i.kind !== 'function' || !imports[i.name]) throw Error(`Unsupported import ${i.module}.${i.name}`);

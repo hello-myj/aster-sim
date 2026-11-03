@@ -23,7 +23,7 @@ function run() {
   try {
     if(replay)replay.step(host);else host.tick();
     if (host.exitCode !== null && host.switchTo) {
-      const app = host.options.catalog.find(x => x.manifest.id === host.switchTo); host.stop(); start(app); return;
+      const app = host.options.catalog.find(x => x.manifest.id === host.switchTo); host.stop(); host.completeInstall(); start(app); return;
     }
     if (host.exitCode !== null || (workerData.frames && (replay?replay.frame:host.frame) >= workerData.frames)) { finish(); return; }
     send({ type: 'heartbeat', frames: host.frame, paused: host.paused,diagnostics:host.diagnostics() });
