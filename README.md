@@ -1,6 +1,6 @@
 # aster-sim
 
-在电脑上运行 Aster 应用包。当前 ABI 为 4.1.0。模拟器执行 WASM，忽略包里的 Xtensa AOT，并拒绝主版本不是 4 的包。
+在电脑上运行 Aster 应用包。当前 ABI 为 4.3.0。模拟器执行 WASM，忽略包里的 Xtensa AOT，并拒绝主版本不是 4 的包。
 
 需要 Node.js 22。
 
