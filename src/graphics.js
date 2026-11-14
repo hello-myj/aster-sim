@@ -119,7 +119,7 @@ function frameControl(host,s,arena,len) {
  if(action===1) {
   if(id) return -1;
   if(host.gfxFrame||host.paused) return -5;
-  if(s.w*s.h>153600) return -1;
+  if(s.w*s.h>(host.options.deviceProfile?.soc==='esp32p4'?230400:153600)) return -1;
   if((host.gfxFrameSequence||0)===0xffffffff) return -11;
   host.syncIn(s);
   const draft={...s,ptr:0,canvas:createCanvas(s.w,s.h)};

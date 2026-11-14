@@ -62,3 +62,13 @@ test('optional frame clip is private, bounded, reset on begin, and QUERY epoch s
  [32,1,4,next,0xffffffff,0,2,2].forEach((v,i)=>f.host.u32(128+i*4,v));
  assert.equal(f.api.aster_gfx_exec(f.h,0,-1,128,32,MAGIC,1,0,0),-1);assert.equal(f.control(2,next),-1);
 });
+
+test('P4 accepts 480 square private frames without increasing the portable limit',()=>{
+ for(const soc of ['esp32p4','esp32s3']){
+  const host=new Host({manifest:{id:'test.largeframe',permissions:[],memory:{heap:786432}},assets:new Map()},{width:480,height:480,deviceProfile:{soc}});
+  host.memory=new WebAssembly.Memory({initial:10});host.heap=600000;
+  const h=host.add('surface',{w:480,h:480,ptr:8192,flags:0,canvas:createCanvas(480,480)},0x02000000);
+  [24,1,1,0,0,0].forEach((v,i)=>host.u32(64+i*4,v));
+  assert.equal(host.imports().aster_gfx_exec(h,0,0xffffffff,64,24,MAGIC,1,0,0),soc==='esp32p4'?0:-1);
+ }
+});
