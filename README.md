@@ -1,5 +1,7 @@
 # aster-sim
 
+新增 Python 桌面系统模拟器：复用固件 Launcher、设置和首次开机 UI，支持 P4/lckfb、自定义分辨率、截图与 MP4 导出。运行 `aster-desktop.cmd`；准备步骤及边界见 [desktop/README.md](desktop/README.md)。原有 APP 命令行入口继续保留。
+
 在电脑上运行 Aster 应用包。当前 ABI 为 4.3.0。模拟器执行 WASM，忽略包里的 Xtensa AOT，并拒绝主版本不是 4 的包。
 
 需要 Node.js 22。

@@ -34,6 +34,9 @@ function errno(e) { return ({ ENOENT: -6, EEXIST: -9, EACCES: -4, EPERM: -4, ENO
 class Host {
   constructor(pkg, options = {}) {
     this.pkg = pkg; this.options = options; this.manifest = pkg.manifest;
+    this.firmwareFonts = options.firmwareFonts ? new (require('./firmware-fonts').FirmwareFonts)(options.firmwareFonts) : null;
+    this.maxTouchPoints = options.maxTouchPoints ?? 2;
+    if (!Number.isInteger(this.maxTouchPoints) || this.maxTouchPoints < 1 || this.maxTouchPoints > 5) throw Error('maxTouchPoints must be 1..5');
     this.width = options.width || 240; this.height = options.height || 320;
     if (this.manifest.orientation === 'landscape' && this.width < this.height || this.manifest.orientation === 'portrait' && this.width > this.height) [this.width, this.height] = [this.height, this.width];
     this.metrics={abiCalls:{},allocationAttempts:0,guestPeakBytes:0,hostAllocationPeakBytes:0,handlePeak:0,frameMs:[],frameSamples:0,frameTotalMs:0,frameMaxMs:0}; this.phase='load';
@@ -137,9 +140,9 @@ class Host {
       aster_system_get_abi_version: () => abiPacked,
       aster_system_get_info: (p, n) => {
         if (!this.struct(p, n, 128)) return -1;
-        this.u32(p+8,abiPacked);this.output(p+12,'simulator',16,true);
-        this.output(p+28,'aster.simulator',40,true);this.output(p+68,'portable-wasm',24,true);
-        this.u32(p+92,4);this.u32(p+100,1);
+        this.u32(p+8,abiPacked);this.output(p+12,this.options.deviceProfile?.platform || 'simulator',16,true);
+        this.output(p+28,this.options.deviceProfile?.board || 'aster.simulator',40,true);this.output(p+68,this.options.deviceProfile?.soc || 'portable-wasm',24,true);
+        this.u32(p+92,this.options.deviceProfile?.arch || 4);this.u32(p+100,1);
         let flags=0n;for(const bit of this.features)flags|=1n<<BigInt(bit);
         this.bytes(p+120,8).writeBigUInt64LE(flags);return 0;
       },
@@ -155,9 +158,9 @@ class Host {
         this.bytes(p + 24, 8).writeBigUInt64LE(1n << 2n);
         this.u32(p + 32, 60); this.u32(p + 36, this.width > this.height ? 1 : 0); this.u32(p + 44, this.width); this.u32(p + 48, this.height); return 0;
       },
-      aster_input_get_info: (p, n) => { if (!this.struct(p, n, 20)) return -1; this.u32(p + 8, (this.features.has(1) ? 1 : 0) | (this.features.has(3) ? 2 : 0)); this.u32(p + 12, this.features.has(1) ? 2 : 0); return 0; },
+      aster_input_get_info: (p, n) => { if (!this.struct(p, n, 20)) return -1; this.u32(p + 8, (this.features.has(1) ? 1 : 0) | (this.features.has(3) ? 2 : 0)); this.u32(p + 12, this.features.has(1) ? this.maxTouchPoints : 0); return 0; },
       aster_input_touch: (p, n) => {
-        const max = Math.min(n >>> 0, 2); if (!max) return 0;
+        const max = Math.min(n >>> 0, this.maxTouchPoints); if (!max) return 0;
         this.bytes(p, max * 12); // Same three-u32 snapshot layout as firmware.
         const points = [...this.touches.entries()].sort(([a], [b]) => a - b).slice(0, max);
         points.forEach(([, point], index) => [point.x, point.y, 1].forEach((v, field) => this.u32(p + index * 12 + field * 4, v)));
@@ -200,7 +203,7 @@ class Host {
       },
       aster_gfx_exec: (h, ...args) => execGraphics(this, this.get(h, 'surface'), ...args),
       aster_gfx_fonts_pending: () => 0,
-      aster_gfx_text_w: (px, p, n) => { const c = this.screen.getContext('2d'); textFont(c, px); return Math.ceil(c.measureText(this.string(p, n)).width); },
+      aster_gfx_text_w: (px, p, n) => { if(this.firmwareFonts)return this.firmwareFonts.measure(px,this.string(p,n));const c = this.screen.getContext('2d'); textFont(c, px); return Math.ceil(c.measureText(this.string(p, n)).width); },
       aster_gfx_bmp_load: (p, n, w, h, out, ow, oh) => {
         this.bytes(out, 4); this.bytes(ow, 4); this.bytes(oh, 4);
         const img = decodeImage(this.readVirtual(p, n), w, h), c = img.canvas.getContext('2d'), pixels = c.getImageData(0, 0, img.canvas.width, img.canvas.height);
@@ -304,6 +307,7 @@ class Host {
         }
       };
       collect(request.resources);
+      this.options.commitInstall?.(installed, request);
       const catalog=this.options.catalog;
       if(!catalog)throw Object.assign(Error('No catalog'),{code:'EINVAL'});
       const old=catalog.findIndex(p=>p.manifest.id===installed.manifest.id);
@@ -375,7 +379,7 @@ class Host {
     if (msg.type === 'touch') {
       const slot = msg.slot === undefined ? 0 : msg.slot;
       if (this.paused || this.stopped || this.exitCode !== null || !this.features.has(1) ||
-          !Number.isInteger(slot) || slot < 0 || slot >= 2 || ![1, 2, 3].includes(msg.action) ||
+          !Number.isInteger(slot) || slot < 0 || slot >= this.maxTouchPoints || ![1, 2, 3].includes(msg.action) ||
           !Number.isFinite(msg.x) || !Number.isFinite(msg.y)) return;
       if (msg.action !== 1 && !this.touches.has(slot)) return;
       const action = msg.action === 1 && this.touches.has(slot) ? 2 : msg.action;

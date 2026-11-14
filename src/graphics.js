@@ -199,6 +199,7 @@ function execGraphics(host, s, ptr, n, arena, arenaLen, px, py, pw, ph) {
       }
       case 7: {
         if (w[3] + w[4] > arenaLen) return frameFail(host,-1);
+        if(host.firmwareFonts){const text=host.string(arena+w[3],w[4]&65535),face=host.firmwareFonts.face(a);if(w[5]&65536){c.fillStyle=color(w[5]);c.fillRect(x,y-face.asc,host.firmwareFonts.measure(a,text),face.line_h);}host.firmwareFonts.draw(c,a,text,x,y,b);break;}
         textFont(c, a); const text = host.string(arena + w[3], w[4]&65535);
         if (w[5] & 65536) { c.fillStyle = color(w[5]); const face = fontFace(a); c.fillRect(x, y - face.asc, c.measureText(text).width, face.line_h); }
         c.fillStyle = color(b); c.fillText(text, x, y); break;

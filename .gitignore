@@ -4,3 +4,6 @@ node_modules/
 state/
 out/
 *.log
+/build/
+__pycache__/
+.venv/
