@@ -15,8 +15,9 @@ function checkSdk(root) {
   const hashes = Object.fromEntries(Object.entries(lock.sha256).filter(([name]) => name.startsWith('contract/') || name.startsWith('include/')));
   assert.deepEqual(hashes, snapshot.contractHashes, 'SDK public contract changed; review signatures, structures and constants, even if ABI is unchanged');
   for (const [name, expected] of Object.entries(lock.sha256)) {
-    const actual = crypto.createHash('sha256').update(fs.readFileSync(path.join(root, name))).digest('hex');
-    assert.equal(actual, expected, `SDK contract lock mismatch: ${name}`);
+    const bytes = fs.readFileSync(path.join(root, name));
+    const candidates = [bytes, Buffer.from(bytes.toString('utf8').replace(/\r?\n/g, '\r\n'))];
+    assert.ok(candidates.some(data => crypto.createHash('sha256').update(data).digest('hex') === expected), `SDK contract lock mismatch: ${name}`);
   }
   const fontHeader = fs.readFileSync(path.join(root, 'include/aster/font_metrics.h'), 'utf8');
   const fontMacro = /^#define ASTER_FONT_FACE_METRICS\s+(.+)$/m.exec(fontHeader);

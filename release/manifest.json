@@ -10,5 +10,6 @@
       "bytes": 201797724,
       "url": "https://aster-releases.obs.cn-south-1.myhuaweicloud.com/artifacts/dc3b7d7877f08fd727a8eb6a0cfd4f6f96c22a43765e71dd27827a5fefa9d203/aster-sim-1.0.0-windows-x64.zip"
     }
-  ]
+  ],
+  "sdk_revision": "ebb2e760a01dce5b161b0ee2b38ce4488de0e48f"
 }

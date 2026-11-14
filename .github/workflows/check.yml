@@ -18,7 +18,7 @@ jobs:
         run: |
           node - <<'JS'
           const fs = require('node:fs');
-          const revision = require('./aster-sim/src/sdk-compat.json').sdkCommit;
+          const revision = require('./aster-sim/release/manifest.json').sdk_revision || require('./aster-sim/src/sdk-compat.json').sdkCommit;
           if (!/^[0-9a-f]{40}$/.test(revision)) throw Error('SDK revision must be a full commit hash');
           fs.appendFileSync(process.env.GITHUB_OUTPUT, 'revision=' + revision + '\n');
           JS
