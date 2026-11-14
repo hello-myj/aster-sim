@@ -8,3 +8,5 @@ out/
 __pycache__/
 .venv/
 /dist/
+
+/release-output/

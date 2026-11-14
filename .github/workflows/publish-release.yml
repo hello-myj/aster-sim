@@ -1,0 +1,30 @@
+name: Publish verified release assets
+on:
+  workflow_dispatch:
+  push:
+    tags: ['sim-v*']
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify immutable build artifacts
+        run: python tools/publish_release.py
+      - name: Publish Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          TAG=$(python -c 'import json; print(json.load(open("release/manifest.json"))["tag"])')
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release already exists; leaving its assets unchanged."
+            exit 0
+          fi
+          gh release create "$TAG" release-output/* --verify-tag --title "$TAG" --notes-file release/NOTES.md

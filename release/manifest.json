@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "tag": "sim-v1.0.0",
+  "abi": "4.3.0",
+  "source_revision": "0d1095992eaf48ba232fc2736e79296426e8ea77",
+  "assets": [
+    {
+      "file": "aster-sim-1.0.0-windows-x64.zip",
+      "sha256": "dc3b7d7877f08fd727a8eb6a0cfd4f6f96c22a43765e71dd27827a5fefa9d203",
+      "bytes": 201797724,
+      "url": "https://aster-releases.obs.cn-south-1.myhuaweicloud.com/artifacts/dc3b7d7877f08fd727a8eb6a0cfd4f6f96c22a43765e71dd27827a5fefa9d203/aster-sim-1.0.0-windows-x64.zip"
+    }
+  ]
+}
