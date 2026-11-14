@@ -13,6 +13,9 @@ def main():
     command+=['--add-data',str(ffmpeg)+';.tools/desktop']
     subprocess.run(command+[str(ROOT/'desktop/main.py')],check=True)
     directory=output/'dist/aster-sim'
+    # Qt uses the Windows ICU API. A compiler/PATH ICU with the same filename
+    # can be collected accidentally and has incompatible exported symbols.
+    (directory/'_internal/icuuc.dll').unlink(missing_ok=True)
     for folder in ('src','node_modules'):
         root=directory/'_internal'/folder
         if folder=='src':
