@@ -1,12 +1,12 @@
 {
   "name": "aster-sim",
-  "version": "0.3.0",
+  "version": "1.0.0",
   "private": true,
-  "description": "WASM APP simulator for Aster ABI 4.3",
+  "description": "Native desktop Aster system simulator for ABI 4.3",
   "scripts": {
-    "start": "node src/cli.js",
+    "start": "node src/desktop-cli.js",
     "test": "node --test test/*.test.js",
-    "portable": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-portable.ps1",
+    "portable": "python desktop/package_desktop.py",
     "check-sdk": "node scripts/check-sdk.js"
   },
   "engines": {

@@ -22,8 +22,10 @@ from bootstrap import Bootstrap
 from recording import AudioTracks
 from install_dialog import InstallDialog
 
-ROOT=Path(__file__).resolve().parents[1]
-CONFIG_DIR=ROOT.parent/'aster-firmware/config'
+ROOT=Path(getattr(sys,'_MEIPASS',Path(__file__).resolve().parents[1]))
+FIRMWARE_ROOT=ROOT/'resources/firmware' if (ROOT/'resources/firmware').exists() else ROOT.parent/'aster-firmware'
+CONFIG_DIR=FIRMWARE_ROOT/'config'
+STATE_ROOT=Path(sys.executable).parent if getattr(sys,'frozen',False) else ROOT
 def distribution():
     config=json.loads((CONFIG_DIR/'distribution.json').read_text(encoding='utf-8-sig'))
     return config,(CONFIG_DIR/config['ca_bundle']).resolve()
@@ -152,7 +154,7 @@ class Window(QMainWindow):
     def seed(self):
         for relative in ['aster/fonts','aster/apps','aster/system/kv']:(self.sd()/relative).mkdir(parents=True,exist_ok=True)
         if self.args.seed_local or self.debug_mode:
-            fonts=ROOT.parent/'aster-firmware/resources/fonts'
+            fonts=FIRMWARE_ROOT/'resources/fonts'
             for file in fonts.glob('ui_*.cpfont'):
                 dest=self.sd()/'aster/fonts'/file.name
                 if not dest.exists():shutil.copy2(file,dest)
@@ -408,7 +410,7 @@ class Window(QMainWindow):
         if image.width()%2 or image.height()%2:self.error('MP4 录制需要偶数宽高，请调整分辨率。');return
         self.record_path=str(Path(file).resolve());Path(self.record_path).parent.mkdir(parents=True,exist_ok=True)
         self.record_folder=Path(tempfile.mkdtemp(prefix='.aster-record-',dir=Path(self.record_path).parent))
-        self.record_size=image.size();self.encoder=QProcess(self);encoder=self.encoder;ffmpeg=shutil.which('ffmpeg');arguments=[]
+        self.record_size=image.size();self.encoder=QProcess(self);encoder=self.encoder;bundled=ROOT/'.tools/desktop/ffmpeg.exe';ffmpeg=str(bundled) if bundled.is_file() else shutil.which('ffmpeg');arguments=[]
         if not ffmpeg and sys.platform=='win32':
             ffmpeg='wsl';arguments=['-d',self.args.wsl,'--','ffmpeg']
         if not ffmpeg:self.encoder=None;self.cleanup_record_folder();self.error('录屏需要 FFmpeg。');return
@@ -482,7 +484,7 @@ class Window(QMainWindow):
         event.accept()
 
 def parse_args(argv=None):
-    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--profile',choices=PROFILES,default='p4');parser.add_argument('--width',type=int);parser.add_argument('--height',type=int);parser.add_argument('--state',default=str(ROOT/'state/desktop'));parser.add_argument('--title');parser.add_argument('--wsl',default='Ubuntu-22.04');parser.add_argument('--smoke',action='store_true');parser.add_argument('--seed-local',action='store_true',help='Developer shortcut: seed local fonts and compiled Store instead of first-boot download');parser.add_argument('--app',help='Install and launch an AST package or the compiled project directory');parser.add_argument('--resources',help='External resource root (defaults to resources beside the package)');args=parser.parse_args(argv)
+    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--profile',choices=PROFILES,default='p4');parser.add_argument('--width',type=int);parser.add_argument('--height',type=int);parser.add_argument('--state',default=str(STATE_ROOT/'state/desktop'));parser.add_argument('--title');parser.add_argument('--wsl',default='Ubuntu-22.04');parser.add_argument('--smoke',action='store_true');parser.add_argument('--seed-local',action='store_true',help='Developer shortcut: seed local fonts and compiled Store instead of first-boot download');parser.add_argument('--app',help='Install and launch an AST package or the compiled project directory');parser.add_argument('--resources',help='External resource root (defaults to resources beside the package)');args=parser.parse_args(argv)
     for dimension in (args.width,args.height):
         if dimension is not None and not 240<=dimension<=1280:parser.error('尺寸范围为 240..1280')
     if args.resources and not args.app:parser.error('--resources 需要同时指定 --app')

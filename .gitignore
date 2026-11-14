@@ -7,3 +7,4 @@ out/
 /build/
 __pycache__/
 .venv/
+/dist/
