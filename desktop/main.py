@@ -30,10 +30,12 @@ def distribution():
     config=json.loads((CONFIG_DIR/'distribution.json').read_text(encoding='utf-8-sig'))
     return config,(CONFIG_DIR/config['ca_bundle']).resolve()
 PROFILES={
- 'p4':{'label':'ESP32-P4 · 480 × 480','width':480,'height':480,'board':'osptek-p4-st7102','arch':3,'soc':'esp32p4','touch':5,'target':'riscv'},
- 'lckfb':{'label':'lckfb · 240 × 320','width':240,'height':320,'board':'aster.esp32s3.lckfb','arch':1,'soc':'esp32s3','touch':2,'target':'xtensa'},
+ 'osptek-p4':{'label':'鱼鹰光电 P4C5 · ST7102 · 480 × 480','width':480,'height':480,'board':'osptek-p4-st7102','arch':3,'soc':'esp32p4','touch':5,'target':'riscv'},
+ 'lckfb-s3':{'label':'立创 ESP32-S3 实战派 · 240 × 320','width':240,'height':320,'board':'aster.esp32s3.lckfb','arch':1,'soc':'esp32s3','touch':2,'target':'xtensa'},
  'custom':{'label':'自定义分辨率','width':320,'height':480,'board':'aster.simulator','arch':4,'soc':'host','touch':5,'target':'riscv'},
 }
+
+PROFILE_ALIASES={'p4':'osptek-p4','lckfb':'lckfb-s3'}
 
 class Screen(QWidget):
     touched=Signal(int,int,int,int)
@@ -92,7 +94,7 @@ class Screen(QWidget):
 
 class Window(QMainWindow):
     def __init__(self,args):
-        super().__init__();self.args=args;self.setWindowTitle(args.title or 'Aster · 系统模拟器')
+        super().__init__();args.profile=PROFILE_ALIASES.get(args.profile,args.profile);self.args=args;self.setWindowTitle(args.title or 'Aster · 系统模拟器')
         # The Qt offscreen platform does not enumerate Windows system fonts.
         if sys.platform=='win32' and not QFontDatabase.families():
             font=Path(os.environ.get('WINDIR','C:/Windows'))/'Fonts/msyh.ttc'
@@ -149,7 +151,10 @@ class Window(QMainWindow):
     def error(self,message):
         self.log(message);self.status.setText(message)
         if not self.args.smoke:QMessageBox.warning(self,'Aster',message)
-    def state(self):return self.state_base/self.profile_key
+    def state(self):
+        current=self.state_base/self.profile_key
+        legacy=next((self.state_base/alias for alias,key in PROFILE_ALIASES.items() if key==self.profile_key and (self.state_base/alias).exists()),None)
+        return legacy if legacy and not current.exists() else current
     def sd(self):return self.state()/'shared/sd'
     def seed(self):
         for relative in ['aster/fonts','aster/apps','aster/system/kv']:(self.sd()/relative).mkdir(parents=True,exist_ok=True)
@@ -167,7 +172,7 @@ class Window(QMainWindow):
             'deviceProfile':{**{k:profile[k] for k in ['board','arch','soc']},'platform':'simulator' if self.profile_key=='custom' else 'desktop'},
             'networkCA':str(distribution()[1]),
             'firmwareFonts':str(self.sd()/'aster/fonts'),
-            'missingFeatures':['accelerometer','gyroscope'] if self.profile_key=='p4' else []}})
+            'missingFeatures':['accelerometer','gyroscope'] if self.profile_key=='osptek-p4' else []}})
         self.seed_store=self.args.seed_local
     def native_command(self,command):
         if self.core and self.core.state()==QProcess.ProcessState.Running:self.core.write((command+'\n').encode())
@@ -207,7 +212,7 @@ class Window(QMainWindow):
         config,ca=distribution()
         source,ok=QInputDialog.getText(self,'模拟联网','模拟器使用电脑当前网络，无需连接虚拟热点。\n系统资源服务器：',text=config['source_url'])
         if not ok:return
-        if self.profile_key=='custom':self.error('首次联网准备请先选择 P4 或 lckfb；准备后可修改宽高测试布局。');return
+        if self.profile_key=='custom':self.error('首次联网准备请先选择鱼鹰光电 P4C5 或立创实战派；准备后可修改宽高测试布局。');return
         try:self.bootstrap=Bootstrap(self.sd(),self.profile,source,ca)
         except Exception as error:self.error(str(error));return
         self.bootstrap.progress.connect(self.setup_progress);self.bootstrap.complete.connect(self.setup_complete);self.bootstrap.failed.connect(self.setup_failed);self.bootstrap.start()
@@ -484,7 +489,7 @@ class Window(QMainWindow):
         event.accept()
 
 def parse_args(argv=None):
-    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--profile',choices=PROFILES,default='p4');parser.add_argument('--width',type=int);parser.add_argument('--height',type=int);parser.add_argument('--state',default=str(STATE_ROOT/'state/desktop'));parser.add_argument('--title');parser.add_argument('--wsl',default='Ubuntu-22.04');parser.add_argument('--smoke',action='store_true');parser.add_argument('--seed-local',action='store_true',help='Developer shortcut: seed local fonts and compiled Store instead of first-boot download');parser.add_argument('--app',help='Install and launch an AST package or the compiled project directory');parser.add_argument('--resources',help='External resource root (defaults to resources beside the package)');args=parser.parse_args(argv)
+    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--profile',type=lambda v:PROFILE_ALIASES.get(v,v),choices=PROFILES,default='osptek-p4');parser.add_argument('--width',type=int);parser.add_argument('--height',type=int);parser.add_argument('--state',default=str(STATE_ROOT/'state/desktop'));parser.add_argument('--title');parser.add_argument('--wsl',default='Ubuntu-22.04');parser.add_argument('--smoke',action='store_true');parser.add_argument('--seed-local',action='store_true',help='Developer shortcut: seed local fonts and compiled Store instead of first-boot download');parser.add_argument('--app',help='Install and launch an AST package or the compiled project directory');parser.add_argument('--resources',help='External resource root (defaults to resources beside the package)');args=parser.parse_args(argv)
     for dimension in (args.width,args.height):
         if dimension is not None and not 240<=dimension<=1280:parser.error('尺寸范围为 240..1280')
     if args.resources and not args.app:parser.error('--resources 需要同时指定 --app')
@@ -493,7 +498,9 @@ def parse_args(argv=None):
         if file.is_dir():
             try:
                 with (file/'app.toml').open('rb') as stream:manifest=tomllib.load(stream)
-                file=file/'dist'/PROFILES[args.profile]['target']/(manifest['app']['id']+'.ast')
+                output=file/'dist'/PROFILES[args.profile]['target']
+                hardware_package=output/args.profile/(manifest['app']['id']+'.ast')
+                file=hardware_package if hardware_package.is_file() else output/(manifest['app']['id']+'.ast')
             except (OSError,ValueError,KeyError) as error:parser.error('无法读取 APP 工程：'+str(error))
         if not file.is_file():parser.error('安装包不存在，请先使用 SDK 编译：'+str(file))
         args.app=str(file)

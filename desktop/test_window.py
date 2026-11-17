@@ -33,6 +33,14 @@ def pump(seconds):
     while time.monotonic()<end:APP.processEvents();time.sleep(.01)
 
 class WindowTests(unittest.TestCase):
+    def test_physical_profile_names_and_legacy_aliases(self):
+        from main import PROFILES
+        self.assertEqual(parse_args(['--profile','p4']).profile,'osptek-p4')
+        self.assertEqual(parse_args(['--profile','lckfb']).profile,'lckfb-s3')
+        self.assertEqual(parse_args(['--profile','osptek-p4']).profile,'osptek-p4')
+        self.assertIn('鱼鹰光电',PROFILES['osptek-p4']['label'])
+        self.assertEqual(PROFILES['osptek-p4']['board'],'osptek-p4-st7102')
+
     def test_install_progress_result_and_failure_preserve_installed_app(self):
         with tempfile.TemporaryDirectory(prefix='install-window-test-',dir=ROOT/'build') as folder:
             args=SimpleNamespace(profile='p4',width=None,height=None,state=folder,wsl='Ubuntu-22.04',smoke=True,seed_local=True,title='Install integration test')
@@ -99,7 +107,7 @@ class WindowTests(unittest.TestCase):
                 window.device.setCurrentIndex(1);window.apply_geometry()
                 until(lambda:window.dependencies_ready() and window.screen.image.width()==240)
                 pump(.4)
-                self.assertEqual(window.profile_key,'lckfb')
+                self.assertEqual(window.profile_key,'lckfb-s3')
                 self.assertTrue(window.save_screenshot(ARTIFACTS/'lckfb-launcher.png'))
                 # A custom size retains this device's persistent card and installed APPs.
                 window.width_box.setValue(320);window.height_box.setValue(480);window.apply_geometry()

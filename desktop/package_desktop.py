@@ -22,7 +22,7 @@ def main():
             for name in ('cli.js','server.js','web.js'): (root/name).unlink(missing_ok=True)
     identity={'schema':1,'version':'1.0.0','abi':'4.3.0','commit':subprocess.check_output(['git','-C',str(ROOT),'rev-parse','HEAD'],text=True).strip()}
     (directory/'release.json').write_text(json.dumps(identity,indent=2)+'\n')
-    (directory/'README.txt').write_text('Aster desktop simulator. Launch aster-sim.exe. Debug: aster-sim.exe --profile p4 --app PATH_TO_PROJECT. External resources beside the AST package are detected automatically.\n',encoding='utf-8')
+    (directory/'README.txt').write_text('Aster desktop simulator. Launch aster-sim.exe. Debug: aster-sim.exe --profile osptek-p4 --app PATH_TO_PROJECT. External resources beside the AST package are detected automatically.\n',encoding='utf-8')
     dest=ROOT/'dist';dest.mkdir(exist_ok=True);archive=dest/'aster-sim-1.0.0-windows-x64.zip'
     with zipfile.ZipFile(archive,'w',zipfile.ZIP_DEFLATED) as z:
         for p in sorted(directory.rglob('*')):

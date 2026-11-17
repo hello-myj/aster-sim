@@ -8,6 +8,7 @@ if(NOT EXISTS "${UI}/launcher/flux.c")
   message(FATAL_ERROR "Set ASTER_FIRMWARE to the firmware repository")
 endif()
 include("${ASTER_FIRMWARE}/common/setup/assets.cmake")
+include("${ASTER_FIRMWARE}/common/sources.cmake")
 file(GLOB_RECURSE LV_SOURCES "${ASTER_FIRMWARE}/third_party/lvgl/src/*.c")
 list(FILTER LV_SOURCES EXCLUDE REGEX "/(examples|tests|demos|libs)/")
 list(FILTER LV_SOURCES EXCLUDE REGEX "/stdlib/(uefi|rtthread|micropython)/")
@@ -16,7 +17,8 @@ add_executable(aster-desktop-core core.c port.c audio.c setup.c
   "${ASTER_FIRMWARE}/common/setup/aster_setup_core.c"
   "${ASTER_FIRMWARE}/third_party/qrcodegen/qrcodegen.c"
   "${ASTER_FIRMWARE}/platform/esp32s3/audio_effect_engine.c"
-  "${ASTER_FIRMWARE}/common/port/aster_device.c"
+  ${ASTER_COMMON_DEVICE_SOURCES}
+  "${ASTER_FIRMWARE}/common/audio/aster_player_service.c"
   "${ASTER_FIRMWARE}/common/port/aster_os.c"
   "${ASTER_FIRMWARE}/common/port/aster_services.c"
   "${UI}/launcher/flux.c" "${UI}/launcher/flux_font.c" "${UI}/flux_draw.c"
@@ -27,7 +29,7 @@ add_executable(aster-desktop-core core.c port.c audio.c setup.c
   "${ASTER_FIRMWARE}/third_party/lvgl/src/libs/bin_decoder/lv_bin_decoder.c"
   "${ASTER_FIRMWARE}/third_party/lvgl/src/libs/rle/lv_rle.c")
 add_dependencies(aster-desktop-core aster_system_fonts)
-target_include_directories(aster-desktop-core PRIVATE include . "${UI}" "${UI}/launcher"
+target_include_directories(aster-desktop-core PRIVATE ${ASTER_COMMON_INCLUDE_DIRS} include . "${UI}" "${UI}/launcher"
   "${ASTER_FIRMWARE}/common/port" "${ASTER_FIRMWARE}/common/net"
   "${ASTER_FIRMWARE}/common/setup" "${ASTER_FIRMWARE}/third_party/qrcodegen"
   "${ASTER_FIRMWARE}/platform" "${ASTER_FIRMWARE}/platform/esp32s3"
