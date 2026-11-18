@@ -12,7 +12,7 @@ include("${ASTER_FIRMWARE}/common/sources.cmake")
 file(GLOB_RECURSE LV_SOURCES "${ASTER_FIRMWARE}/third_party/lvgl/src/*.c")
 list(FILTER LV_SOURCES EXCLUDE REGEX "/(examples|tests|demos|libs)/")
 list(FILTER LV_SOURCES EXCLUDE REGEX "/stdlib/(uefi|rtthread|micropython)/")
-add_executable(aster-desktop-core core.c port.c audio.c setup.c
+add_executable(aster-desktop-core ${ASTER_COMMON_POWER_UI} core.c port.c audio.c setup.c
   "${ASTER_FIRMWARE}/systems/shared/setup/setup_ui.c"
   "${ASTER_FIRMWARE}/common/setup/aster_setup_core.c"
   "${ASTER_FIRMWARE}/third_party/qrcodegen/qrcodegen.c"
