@@ -8,7 +8,8 @@ const snapshot = require('../src/sdk-compat.json');
 const { parse } = require('../src/cli');
 const { checkSdk } = require('../scripts/check-sdk');
 test('resolution selects the window and board flags are not accepted', () => {
-  assert.equal(parse(['demo.ast']).width, 240); assert.equal(parse(['demo.ast']).height, 320);
+  assert.equal(parse(['demo.ast']).width, 240);
+  assert.equal(parse(['demo.ast']).height, 320);
   assert.equal(parse(['demo.ast', '--resolution', '480x800']).width, 480);
   assert.equal(parse(['demo.ast', '--resolution', '480x800']).height, 800);
   assert.throws(() => parse(['demo.ast', '--board', 'lckfb-s3']), /Unknown option/);
@@ -20,24 +21,46 @@ test('SDK compatibility check rejects same-ABI public structure changes', t => {
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   fs.mkdirSync(path.join(root, 'contract'));
   const hashes = { ...snapshot.contractHashes, 'include/aster/imu.h': 'changed' };
-  fs.writeFileSync(path.join(root, 'contract/lock.json'), JSON.stringify({ abi: snapshot.abi, sha256: hashes }));
-  fs.writeFileSync(path.join(root, 'contract/api.json'), JSON.stringify({ abi: snapshot.abi, imports: { env: snapshot.imports } }));
+  fs.writeFileSync(
+    path.join(root, 'contract/lock.json'),
+    JSON.stringify({ abi: snapshot.abi, sha256: hashes })
+  );
+  fs.writeFileSync(
+    path.join(root, 'contract/api.json'),
+    JSON.stringify({ abi: snapshot.abi, imports: { env: snapshot.imports } })
+  );
   assert.throws(() => checkSdk(root), /public contract changed/);
 });
 function wasmWithMemory(initialPages, maxPages) {
-  const bytes = [0, 97, 115, 109, 1, 0, 0, 0], section = (id, data) => bytes.push(id, data.length, ...data);
-  section(1, [2, 0x60, 0, 1, 0x7f, 0x60, 1, 0x7f, 0]); section(3, [2, 0, 1]);
-  section(5, [1, 1, initialPages, maxPages]); section(6, [1, 0x7f, 0, 0x41, 0x80, 0x08, 0x0b]);
+  const bytes = [0, 97, 115, 109, 1, 0, 0, 0],
+    section = (id, data) => bytes.push(id, data.length, ...data);
+  section(1, [2, 0x60, 0, 1, 0x7f, 0x60, 1, 0x7f, 0]);
+  section(3, [2, 0, 1]);
+  section(5, [1, 1, initialPages, maxPages]);
+  section(6, [1, 0x7f, 0, 0x41, 0x80, 0x08, 0x0b]);
   const exports = [4];
-  for (const [name, kind, index] of [['memory', 2, 0], ['__heap_base', 3, 0], ['aster_app_init', 0, 0], ['aster_app_event', 0, 1]]) exports.push(name.length, ...Buffer.from(name), kind, index);
-  section(7, exports); section(10, [2, 4, 0, 0x41, 0, 0x0b, 2, 0, 0x0b]); return Buffer.from(bytes);
+  for (const [name, kind, index] of [
+    ['memory', 2, 0],
+    ['__heap_base', 3, 0],
+    ['aster_app_init', 0, 0],
+    ['aster_app_event', 0, 1]
+  ])
+    exports.push(name.length, ...Buffer.from(name), kind, index);
+  section(7, exports);
+  section(10, [2, 4, 0, 0x41, 0, 0x0b, 2, 0, 0x0b]);
+  return Buffer.from(bytes);
 }
 test('linear memory follows the package maximum, not a board profile', t => {
   const { Host } = require('../src/host');
-  const pkg = manifest => ({ manifest, assets: new Map(), wasm: wasmWithMemory(manifest.pages || 1, 127) });
+  const pkg = manifest => ({
+    manifest,
+    assets: new Map(),
+    wasm: wasmWithMemory(manifest.pages || 1, 127)
+  });
   const open = manifest => {
     const h = new Host(pkg(manifest), {});
-    h.memory = new WebAssembly.Memory({ initial: 1, maximum: 127 }); h.heap = 65536;
+    h.memory = new WebAssembly.Memory({ initial: 1, maximum: 127 });
+    h.heap = 65536;
     t.after(() => h.stop());
     return h;
   };
@@ -46,46 +69,98 @@ test('linear memory follows the package maximum, not a board profile', t => {
   const capped = open({ id: 'test.memlimit', permissions: [], memory: { max: 262144 } });
   assert.equal(capped.maxLinear, 262144);
   assert.equal(capped.alloc(262145), 0);
-  const over = new Host({ manifest: { id: 'test.memlimit', permissions: [], memory: { max: 131072 } }, assets: new Map(), wasm: wasmWithMemory(3, 127) }, {});
+  const over = new Host(
+    {
+      manifest: { id: 'test.memlimit', permissions: [], memory: { max: 131072 } },
+      assets: new Map(),
+      wasm: wasmWithMemory(3, 127)
+    },
+    {}
+  );
   t.after(() => over.stop());
   assert.throws(() => over.start(), /package maximum/);
-  const fit = new Host({ manifest: { id: 'test.memlimit', permissions: [] }, assets: new Map(), wasm: wasmWithMemory(33, 127) }, {});
+  const fit = new Host(
+    {
+      manifest: { id: 'test.memlimit', permissions: [] },
+      assets: new Map(),
+      wasm: wasmWithMemory(33, 127)
+    },
+    {}
+  );
   t.after(() => fit.stop());
   assert.doesNotThrow(() => fit.start());
 });
 test('full-panel 320x480 canvas uses platform memory; ordinary and partial surfaces use APP heap', t => {
   const { Host } = require('../src/host');
-  const h = new Host({ manifest: { id: 'test.largecanvas', permissions: [], memory: { heap: 262144 } }, assets: new Map() }, { width: 320, height: 480 });
-  h.memory = new WebAssembly.Memory({ initial: 8 }); h.heap = 4096;
+  const h = new Host(
+    {
+      manifest: { id: 'test.largecanvas', permissions: [], memory: { heap: 262144 } },
+      assets: new Map()
+    },
+    { width: 320, height: 480 }
+  );
+  h.memory = new WebAssembly.Memory({ initial: 8 });
+  h.heap = 4096;
   t.after(() => h.stop());
-  const api = h.imports(), desc = h.alloc(24), out = h.alloc(4), buf = h.alloc(32);
-  h.u32(desc, 24); h.u32(desc + 4, 1); h.u32(desc + 8, 320); h.u32(desc + 12, 480); h.u32(desc + 16, 0x1002); h.u32(desc + 20, 1);
+  const api = h.imports(),
+    desc = h.alloc(24),
+    out = h.alloc(4),
+    buf = h.alloc(32);
+  h.u32(desc, 24);
+  h.u32(desc + 4, 1);
+  h.u32(desc + 8, 320);
+  h.u32(desc + 12, 480);
+  h.u32(desc + 16, 0x1002);
+  h.u32(desc + 20, 1);
   assert.equal(api.aster_surface_create(desc, 24, out), 0);
-  h.u32(buf, 32); h.u32(buf + 4, 1);
+  h.u32(buf, 32);
+  h.u32(buf + 4, 1);
   assert.equal(api.aster_surface_acquire(h.u32(out), buf, 32), 0);
-  assert.equal(h.u32(buf + 8), 0); assert.equal(h.u32(buf + 28), 1);
+  assert.equal(h.u32(buf + 8), 0);
+  assert.equal(h.u32(buf + 28), 1);
   h.u32(desc + 20, 0);
   assert.equal(api.aster_surface_create(desc, 24, out), -2);
-  h.u32(desc + 20, 1); h.u32(desc + 8, 100); h.u32(desc + 12, 100);
+  h.u32(desc + 20, 1);
+  h.u32(desc + 8, 100);
+  h.u32(desc + 12, 100);
   assert.equal(api.aster_surface_create(desc, 24, out), 0);
   assert.equal(api.aster_surface_acquire(h.u32(out), buf, 32), 0);
-  assert.ok(h.u32(buf + 8) > 0); assert.equal(h.u32(buf + 28), 0);
+  assert.ok(h.u32(buf + 8) > 0);
+  assert.equal(h.u32(buf + 28), 0);
 });
 test('scale-fit keeps the app buffer and inverse-maps touch into it', t => {
   const { Host } = require('../src/host');
-  const h = new Host({ manifest: { id: 'test.scalefit', permissions: [], memory: { heap: 262144 } }, assets: new Map() }, { width: 200, height: 100 });
-  h.memory = new WebAssembly.Memory({ initial: 4 }); h.heap = 4096;
+  const h = new Host(
+    {
+      manifest: { id: 'test.scalefit', permissions: [], memory: { heap: 262144 } },
+      assets: new Map()
+    },
+    { width: 200, height: 100 }
+  );
+  h.memory = new WebAssembly.Memory({ initial: 4 });
+  h.heap = 4096;
   t.after(() => h.stop());
-  const api = h.imports(), desc = h.alloc(24), out = h.alloc(4), buf = h.alloc(32);
-  h.u32(desc, 24); h.u32(desc + 4, 1); h.u32(desc + 8, 100); h.u32(desc + 12, 100); h.u32(desc + 16, 0x1002); h.u32(desc + 20, 3);
+  const api = h.imports(),
+    desc = h.alloc(24),
+    out = h.alloc(4),
+    buf = h.alloc(32);
+  h.u32(desc, 24);
+  h.u32(desc + 4, 1);
+  h.u32(desc + 8, 100);
+  h.u32(desc + 12, 100);
+  h.u32(desc + 16, 0x1002);
+  h.u32(desc + 20, 3);
   assert.equal(api.aster_surface_create(desc, 24, out), -1);
-  h.u32(desc + 20, 2); h.u32(desc + 8, 0);
+  h.u32(desc + 20, 2);
+  h.u32(desc + 8, 0);
   assert.equal(api.aster_surface_create(desc, 24, out), -1);
   h.u32(desc + 8, 100);
   assert.equal(api.aster_surface_create(desc, 24, out), 0);
-  h.u32(buf, 32); h.u32(buf + 4, 1);
+  h.u32(buf, 32);
+  h.u32(buf + 4, 1);
   assert.equal(api.aster_surface_acquire(h.u32(out), buf, 32), 0);
-  assert.equal(h.u32(buf + 12), 100); assert.equal(h.u32(buf + 28), 2);
+  assert.equal(h.u32(buf + 12), 100);
+  assert.equal(h.u32(buf + 28), 2);
   assert.equal(api.aster_surface_present(h.u32(out)), 0);
   assert.deepEqual(h.mapTouch(0, 50), { x: 0, y: 50 });
   assert.deepEqual(h.mapTouch(100, 50), { x: 50, y: 50 });

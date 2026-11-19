@@ -10,7 +10,8 @@ class ProcessWorker extends EventEmitter {
   constructor(filename, { workerData }) {
     super();
     this.child = fork(filename, [], {
-      serialization: 'advanced', stdio: ['ignore', 'inherit', 'inherit', 'ipc'],
+      serialization: 'advanced',
+      stdio: ['ignore', 'inherit', 'inherit', 'ipc']
     });
     this.threadId = this.child.pid;
     this.onParentExit = () => this.child.kill();
@@ -40,6 +41,8 @@ class ProcessWorker extends EventEmitter {
 }
 
 function createRuntimeWorker(filename, options, platform = process.platform) {
-  return platform === 'win32' ? new ProcessWorker(filename, options) : new Worker(filename, options);
+  return platform === 'win32'
+    ? new ProcessWorker(filename, options)
+    : new Worker(filename, options);
 }
 module.exports = { createRuntimeWorker };
