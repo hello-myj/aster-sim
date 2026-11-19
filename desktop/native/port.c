@@ -157,11 +157,23 @@ const aster_device_ops_t aster_device_backend={.size=sizeof(aster_device_ops_t),
  .display_count=display_count,.display_get_info=display_info,.display_orientation_get=orientation_get,.display_orientation_set=orientation_set,.display_write_at=write_plain,.display_write_at_ex=write_at,.display_glass_frame=glass_frame,.display_flush_drain=drain,.backlight_set=backlight,.input_poll=input_poll,.input_keys_poll=keys_poll,
  .audio_get_volume=get_volume,.audio_set_volume=set_volume,.audio_ui_play=ui_play,.audio_ui_stop=ui_stop,.audio_ui_release=ui_stop,
  .wifi_status=wifi_status,.wifi_last_ssid=last_ssid,.wifi_security_class=security,.wifi_scan_start=scan_start,.wifi_scan_results=scan_results,.wifi_connect_start=connect_start,.wifi_disconnect_start=disconnect_start,.wifi_reconnect_start=disconnect_start,.wifi_forget_start=disconnect_start,.wifi_operation=wifi_operation,.wifi_hotspot_start=hotspot_start,.wifi_hotspot_stop=disconnect_start,.wifi_hotspot_status=hotspot_status};
-void desktop_home(void){app_active=false;overlay=false;if(desktop_setup_active())return;aster_qpanel_on_app_stop();aster_launcher_app_touch_cancel();aster_gesture_reset();aster_launcher_on_registry_change();aster_launcher_show();}
-void desktop_app(void){aster_launcher_hide();aster_gesture_reset();aster_launcher_app_touch_cancel();app_active=true;overlay=false;}
+void desktop_home(void){app_active=false;overlay=false;if(desktop_setup_active())return;aster_qpanel_on_app_stop();aster_gesture_reset();aster_launcher_on_registry_change();aster_launcher_show();}
+void desktop_app(void){aster_launcher_hide();aster_gesture_reset();app_active=true;overlay=false;}
 void desktop_app_pixels(const uint8_t *data,size_t size){if(size!=(size_t)desktop_width*desktop_height*2||overlay)return;write_plain(data,0,0,desktop_width,desktop_height,desktop_width);}
 void desktop_frame(void){
- if(app_active){aster_touch_evt_t e;while(input_poll(&e,1)>0){if(aster_launcher_power_touch(e.contact_mask!=0))continue;bool consumed=false,down=e.action!=3;if(e.slot==0){aster_gest_t g=aster_gesture_feed(e.x,e.y,down,aster_qpanel_allow(false),desktop_height);consumed=aster_qpanel_on_gesture(g,ASTER_QPANEL_OVER_APP);if(g==ASTER_GEST_PANEL_UP||(!consumed&&!aster_qpanel_is_open()&&aster_launcher_app_touch(e.x,e.y,down))){aster_qpanel_request_exit("应用");consumed=true;}}if(aster_qpanel_is_open()||consumed)aster_ui_lvgl_pointer(e.x,e.y,down);else {char v[80];snprintf(v,sizeof(v),"%u %u %u %u",e.action,e.x,e.y,e.slot);desktop_event("touch",v);}}
+ if(app_active){
+  aster_touch_evt_t e;
+  while(input_poll(&e,1)>0){
+   if(aster_launcher_power_touch(e.contact_mask!=0))continue;
+   bool consumed=false,down=e.action!=ASTER_TOUCH_UP;
+   if(e.slot==0){
+    aster_gest_t gesture=aster_gesture_feed(e.x,e.y,down,aster_qpanel_allow(false),desktop_height);
+    consumed=aster_qpanel_on_gesture(gesture,ASTER_QPANEL_OVER_APP);
+    if(gesture==ASTER_GEST_PANEL_UP){aster_qpanel_request_exit("应用");consumed=true;}
+   }
+   if(aster_qpanel_is_open()||consumed)aster_ui_lvgl_pointer(e.x,e.y,down);
+   else {char v[80];snprintf(v,sizeof(v),"%u %u %u %u",e.action,e.x,e.y,e.slot);desktop_event("touch",v);}
+  }
   aster_qpanel_tick();if(aster_qpanel_is_open())aster_ui_lvgl_pump();if(aster_qpanel_take_exit_confirmed())desktop_event("home","");
   bool open=aster_qpanel_app_holds_glass();if(open!=overlay){overlay=open;desktop_event("overlay",open?"1":"0");}
  }else {if(desktop_setup_active()){if(aster_setup_ui_tick())goto present;desktop_setup_ack();}aster_launcher_pump_idle();}
