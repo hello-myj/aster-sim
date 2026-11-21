@@ -35,7 +35,7 @@ Usage: aster-sim APP.ast [--resolution 240x320] [options]
   --pubkey FILE          Ed25519 public key for signed .ast
   --version              Show simulator and supported SDK contract version
   --help                 Show help
-Only WASM is executed; any Xtensa AOT payload in .ast is ignored.
+Only WASM is executed; any native AOT payload in .ast is ignored.
 `;
 function parse(argv) {
   const opts = { width: 240, height: 320, scale: 2, port: 0, watchdog: 10, files: [] };

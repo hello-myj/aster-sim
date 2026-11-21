@@ -2,7 +2,7 @@
   "name": "aster-sim",
   "version": "1.0.0",
   "private": true,
-  "description": "Native desktop Aster system simulator for ABI 4.3",
+  "description": "Native desktop Aster system simulator for Aster applications",
   "scripts": {
     "start": "node src/desktop-cli.js",
     "test": "node --test test/*.test.js",

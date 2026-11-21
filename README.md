@@ -1,28 +1,28 @@
 # aster-sim
 
-新增 Python 桌面系统模拟器：复用固件 Launcher、设置和首次开机 UI，支持 P4/lckfb、自定义分辨率、截图与 MP4 导出。运行 `aster-desktop.cmd`；准备步骤及边界见 [desktop/README.md](desktop/README.md)。原有 APP 命令行入口继续保留。
+桌面系统模拟器通过 Python / PySide6 显示固件的 Launcher、下拉设置和首次开机界面，应用由独立进程执行 WASM。它可以安装应用及独立资源、保存虚拟 SD 卡、导出截图和带声音的 MP4。
 
-在电脑上运行 Aster 应用包。当前 ABI 为 4.3.0。模拟器执行 WASM，忽略包里的 Xtensa AOT，并拒绝主版本不是 4 的包。
+## 启动系统
 
-需要 Node.js 22。
+使用已发布的 Windows x64 SDK 时，`aster sim --profile osptek-p4 --app 项目目录` 会下载配套模拟器并打开已构建的项目。公开的 `sim-v1.0.0` 使用 ABI 4.3。要运行源码版，先按 [桌面构建说明](desktop/README.md) 准备原生核心和依赖，再从仓库运行：
 
-```bash
+```powershell
+.\aster-desktop.cmd --profile osptek-p4
+.\aster-desktop.cmd --profile lckfb-s3 --app 路径/应用.ast --resources 路径/resources
+```
+
+桌面提供鱼鹰光电 P4C5（480×480）、立创实战派（240×320）和自定义尺寸。源码的 APP 契约是 ABI 4.5。板型与必需能力在启动时检查。系统播放器后端和经典蓝牙链路需在实机验证；更改模拟分辨率只会改变布局。
+
+## 单独运行 APP
+
+命令行主机需要 Node.js 22 及依赖。以下示例只执行包中的 WASM，并把第 120 帧写入 PNG，适合自动化验证：
+
+```sh
 npm ci
-node src/cli.js <应用>.ast --resolution 240x320
+node src/cli.js app.ast --resolution 480x480 --headless --frames 120 --screenshot result.png
 ```
 
-`--resolution` 是屏幕像素，`--scale` 只改变窗口倍数。立创竖屏用 `240x320`，微雪竖屏用 `320x480`。应用声明横屏时会交换宽高。
-
-```bash
-node src/cli.js <应用>.ast --headless --frames 120 --screenshot result.png
-node src/cli.js <应用>.ast --wifi --network
-node src/cli.js <应用目录>
-node src/cli.js app.wasm --manifest manifest.json
-```
-
-`--network` 打开真实 IPv4，包括 TCP、UDP、HTTP、MQTT 和 WebSocket。`--wifi` 只模拟无线状态。关闭窗口不会停止进程，用界面上的结束或 Ctrl+C。
-
-`--state <目录>` 把 `/data`、`/cache` 和 KV 写到磁盘。不传这个参数时，数据只留在本次进程里。
+`--state` 指定持久化存储；`--wifi` 提供虚拟 Wi-Fi 状态，`--network` 允许使用主机网络。[输入回放与诊断](docs/replay.md)
 
 ## 检查
 
@@ -50,10 +50,6 @@ aster deploy <应用>.ast --target xtensa --port <串口> --run
 
 回放和诊断见 [docs/replay.md](docs/replay.md)。`--help` 列出全部参数。
 
-## 双触点输入（feature/multitouch）
+## 输入与音频
 
-触屏浏览器支持两个 Pointer ID，映射为稳定 slot 0/1；鼠标仍是单指输入。丢失捕获、取消或窗口失焦会释放对应触点，暂停/恢复和停止会清空触点。事件保留 `u.touch.slot`；轮询每点12字节（x/y/action），不包含slot。
-
-确定性回放的touch事件可增加 `"slot": 1`，省略时保持slot0；同一frame可按数组顺序记录两个触点。示例为 SDK `apps/neon-duel/tests/two-touch.replay.json`。键盘组合不能替代双指验证；实体屏能力须分别在两款开发板验收。多指保持 ABI 4.0 事件布局。当前连续音效版本为 ABI 4.1；快照绑定 SDK 公开契约提交，随 `sdk-v4.1.0` 正式开发包提供；最终打包元数据提交见 SDK 的 release.json。
-
-连续音效实现循环、音高/音量平滑、独立停止、暂停和晚连接浏览器状态回放。浏览器重新连接会从循环引入段重启，不保证与后台相位对齐。Windows 使用独立进程承载 APP 和原生画布，避免异常退出时线程隔离环境的访问异常，并保留 Trap 报告及看门狗强制终止能力。完整限制见 [音频说明](docs/continuous-audio.md)。
+确定性回放的 touch 事件可指定 `slot`，省略时使用 slot 0。桌面配置决定可用触点数量。系统提示音、APP 音效和背景音乐可随屏幕录制。连续音效、暂停和恢复的实现边界见 [音频说明](docs/continuous-audio.md)。

@@ -56,7 +56,7 @@ def main():
     identity = {
         'schema': 1,
         'version': '1.0.0',
-        'abi': '4.3.0',
+        'abi': json.loads((ROOT / 'src/sdk-compat.json').read_bytes())['abi'],
         'commit': subprocess.check_output(
             ['git', '-C', str(ROOT), 'rev-parse', 'HEAD'], text=True
         ).strip(),

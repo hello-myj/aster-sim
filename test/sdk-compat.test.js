@@ -31,6 +31,29 @@ test('SDK compatibility check rejects same-ABI public structure changes', t => {
   );
   assert.throws(() => checkSdk(root), /public contract changed/);
 });
+test('ABI 4.5 keeps optional player calls linkable without advertising a backend', t => {
+  const { Host } = require('../src/host');
+  const { checkManifest } = require('../src/package');
+  const manifest = { id: 'test.optional', abi: { min: '4.5.0' }, permissions: [] };
+  checkManifest(manifest);
+  assert.throws(() => checkManifest({ ...manifest, abi: { min: '4.5.1' } }), /unsupported ABI/);
+  assert.throws(() => checkManifest({ ...manifest, supported_boards: 'test' }), /supported_boards/);
+  assert.throws(() => checkManifest({ ...manifest, requires: 'display' }), /Invalid requires/);
+  assert.throws(() => checkManifest({ ...manifest, requires: Array(9).fill('touch') }), /Invalid requires/);
+  checkManifest({ ...manifest, requires: ['future-feature'] });
+  const host = new Host({ manifest, assets: new Map() });
+  t.after(() => host.stop());
+  const api = host.imports();
+  assert.equal(api.aster_system_has_feature(23), 0);
+  for (const name of ['aster_player_get_info', 'aster_player_control', 'aster_player_bt_list'])
+    assert.equal(api[name](0, 0), -3);
+  assert.throws(() => new Host({ manifest: { ...manifest, requires: ['media-player'] } }),
+    /Required capability unavailable/);
+  const restricted = { ...manifest, supported_boards: ['osptek-p4-st7102'] };
+  assert.throws(() => new Host({ manifest: restricted }), /Unsupported board/);
+  const matched = new Host({ manifest: restricted }, { deviceProfile: { board: 'osptek-p4-st7102' } });
+  t.after(() => matched.stop());
+});
 function wasmWithMemory(initialPages, maxPages) {
   const bytes = [0, 97, 115, 109, 1, 0, 0, 0],
     section = (id, data) => bytes.push(id, data.length, ...data);

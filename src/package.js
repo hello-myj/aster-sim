@@ -28,11 +28,27 @@ const supported = require('./sdk-compat.json').abi.split('.').map(Number);
 function checkManifest(m) {
   if (!/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$/.test(m.id) || m.id.includes('..'))
     throw Error('Invalid APP ID');
-  const abi = String(m.abi?.min || m.abi?.target || supported.join('.'))
-    .split('.')
-    .map(Number);
-  if (abi[0] !== supported[0] || abi[1] > supported[1])
+  const minimum = m.abi?.min ?? m.abi?.target ?? supported.join('.');
+  if (typeof minimum !== 'string' || !/^\d+\.\d+(?:\.\d+)?$/.test(minimum))
+    throw Error('Invalid minimum ABI');
+  const [major, minor, patch = 0] = minimum.split('.').map(Number);
+  if (major !== supported[0] || minor > supported[1] || (minor === supported[1] && patch > supported[2]))
     throw Error(`Requires unsupported ABI; host is ${supported.join('.')}`);
+  // These limits match the fixed-width fields in the firmware package manifest.
+  const idLists = [
+    ['supported_boards', 39],
+    ['requires', 23]
+  ];
+  for (const [field, maxLength] of idLists) {
+    const values = m[field];
+    if (values === undefined) continue;
+    if (
+      !Array.isArray(values) ||
+      values.length > 8 ||
+      values.some(id => typeof id !== 'string' || id.length > maxLength || !/^[A-Za-z0-9_.-]+$/.test(id))
+    )
+      throw Error(`Invalid ${field}`);
+  }
   if (m.orientation && !['portrait', 'landscape'].includes(m.orientation))
     throw Error('Invalid orientation');
   return m;

@@ -23,7 +23,8 @@ const FEATURES = {
   mqtt: 19,
   websocket: 20,
   'audio-effects': 21,
-  'audio-effects-memory': 22
+  'audio-effects-memory': 22,
+  'media-player': 23
 };
 function validateReplay(value) {
   const integer = (n, min, max) => Number.isSafeInteger(n) && n >= min && n <= max;

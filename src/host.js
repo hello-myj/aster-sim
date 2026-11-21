@@ -162,31 +162,16 @@ class Host {
     this.screen = createCanvas(this.width, this.height);
     this.presentCount = 0;
     this.send = options.send || (() => {});
-    const names = {
-      display: 0,
-      touch: 1,
-      mouse: 2,
-      keyboard: 3,
-      camera: 4,
-      'audio-in': 5,
-      'audio-out': 6,
-      wifi: 7,
-      bluetooth: 8,
-      accelerometer: 9,
-      gyroscope: 10,
-      filesystem: 11,
-      rtc: 12,
-      psram: 13,
-      framebuffer: 14,
-      network: 15,
-      http: 16,
-      tls: 17,
-      'audio-stream': 18,
-      mqtt: 19
-    };
-    for (const feature of this.manifest.requires || [])
-      if (!this.features.has(FEATURES[feature]))
-        throw Error(`Required capability unavailable: ${feature}`);
+    const unavailable = this.launchRestriction(this.manifest);
+    if (unavailable) throw Error(unavailable);
+  }
+  launchRestriction(manifest) {
+    const board = this.options.deviceProfile?.board || 'aster.simulator';
+    if (manifest.supported_boards?.length && !manifest.supported_boards.includes(board))
+      return `Unsupported board: ${board}`;
+    for (const feature of manifest.requires || [])
+      if (!this.features.has(FEATURES[feature])) return `Required capability unavailable: ${feature}`;
+    return null;
   }
   now() {
     return this.options.clock ? this.options.clock() : Math.floor(performance.now() - this.boot);
@@ -388,6 +373,9 @@ class Host {
         this.bytes(p + 120, 8).writeBigUInt64LE(flags);
         return 0;
       },
+      aster_player_get_info: () => E.UNSUPPORTED,
+      aster_player_control: () => E.UNSUPPORTED,
+      aster_player_bt_list: () => E.UNSUPPORTED,
       aster_system_has_feature: bit => (this.features.has(bit) ? 1 : 0),
       aster_app_exit: code => {
         this.exitCode = code;
@@ -656,7 +644,9 @@ class Host {
       this.permission('appmgr');
       const id = this.string(p, n);
       if (id === this.manifest.id) return -5;
-      if (!(this.options.catalog || []).some(a => a.manifest.id === id)) return -6;
+      const app = (this.options.catalog || []).find(a => a.manifest.id === id);
+      if (!app) return E.MISSING;
+      if (this.launchRestriction(app.manifest)) return E.UNSUPPORTED;
       this.switchTo = id;
       this.exitCode = 0;
       return 0;
@@ -797,9 +787,6 @@ class Host {
       );
       if (installed.manifest.id === this.manifest.id)
         throw Object.assign(Error('Self update denied'), { code: 'EPERM' });
-      for (const feature of installed.manifest.requires || [])
-        if (!this.features.has(FEATURES[feature]))
-          throw Object.assign(Error('Unsupported feature'), { code: 'EINVAL' });
       let count = 0,
         total = 0;
       const collect = (base, prefix = '', depth = 0) => {

@@ -1,6 +1,6 @@
 # Python 系统模拟器
 
-分支：`feat/desktop-system-simulator`。配套固件分支为 `refactor/platform-adapter-api`，两仓库放在同一个父目录。
+从源码构建时，将 `aster-sim` 和 `aster-firmware` 放在同一父目录。便携包已包含桌面核心和运行依赖。
 
 此入口使用 PySide6 原生窗口，不启动网页服务器或 WebView。Launcher、卡片动画、手势、下拉设置、Wi-Fi 设置页、启动画面和首次开机进度页直接编译固件 C/LVGL 源码，通过 `aster_device`、`aster_os`、`aster_services` 端口接入桌面。APP 继续由已有 Node/WASM 运行时执行，独立进程异常或超时后可返回桌面。APP 文本读取虚拟 SD 卡上的 CPFONT v4，与设备使用相同字形、整数宽度和基线。
 
@@ -17,7 +17,7 @@ wsl -d Ubuntu-22.04 -- sudo apt-get install cmake gcc-mingw-w64-x86-64-posix ffm
 .\aster-desktop.cmd
 ```
 
-已在当前工作区准备好依赖和构建产物，可直接双击 `aster-desktop.cmd`。FFmpeg 用于录屏：优先采用 Windows PATH 中的版本，否则使用 WSL FFmpeg。Node.js 构建时复制到忽略目录 `.tools/desktop/`；也可以用环境变量 `ASTER_SIM_NODE` 指定路径。
+完成上述构建后可双击 `aster-desktop.cmd`。FFmpeg 用于录屏：优先采用 Windows PATH 中的版本，否则使用 WSL FFmpeg。Node.js 构建时复制到忽略目录 `.tools/desktop/`；也可以用环境变量 `ASTER_SIM_NODE` 指定路径。
 
 ## 设备与虚拟 SD 卡
 
