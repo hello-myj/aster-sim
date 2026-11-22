@@ -1,15 +1,15 @@
 {
   "schema": 1,
-  "tag": "sim-v1.0.0",
-  "abi": "4.3.0",
-  "source_revision": "0d1095992eaf48ba232fc2736e79296426e8ea77",
+  "abi": "4.5.0",
+  "tag": "sim-v1.1.0",
+  "source_revision": "f6a43eef9db36a59b55a003ca3a5eaec3fd18d1a",
   "assets": [
     {
-      "file": "aster-sim-1.0.0-windows-x64.zip",
-      "sha256": "dc3b7d7877f08fd727a8eb6a0cfd4f6f96c22a43765e71dd27827a5fefa9d203",
-      "bytes": 201797724,
-      "url": "https://aster-releases.obs.cn-south-1.myhuaweicloud.com/artifacts/dc3b7d7877f08fd727a8eb6a0cfd4f6f96c22a43765e71dd27827a5fefa9d203/aster-sim-1.0.0-windows-x64.zip"
+      "file": "aster-sim-1.1.0-windows-x64.zip",
+      "sha256": "47985d9265787cd07f9f446aa1d95f696b1c5360978e38373db11fbff2df3181",
+      "bytes": 201839452,
+      "url": "https://aster-releases.obs.cn-south-1.myhuaweicloud.com/artifacts/47985d9265787cd07f9f446aa1d95f696b1c5360978e38373db11fbff2df3181/aster-sim-1.1.0-windows-x64.zip"
     }
   ],
-  "sdk_revision": "ebb2e760a01dce5b161b0ee2b38ce4488de0e48f"
+  "sdk_revision": "cb12da0878bb51e969b0f6c587a7dbdba0082700"
 }
