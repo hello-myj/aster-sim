@@ -1,6 +1,6 @@
 # 回放
 
-用固定时钟、种子和输入运行一个包，并写出诊断。当前 ABI 为 4.1.0。回放执行 WASM，不连接真实网络。
+用固定时钟、种子和输入运行一个包，并写出诊断。源码宿主的 ABI 和已知能力位见 [sdk-compat.json](../src/sdk-compat.json)；当前是 4.5.0。回放执行 WASM，不连接真实网络。
 
 ```bash
 node src/cli.js <应用>.ast --replay scenario.json --diagnostics report.json --screenshot final.png
@@ -29,6 +29,6 @@ node src/cli.js <应用>.ast --replay scenario.json --diagnostics report.json --
 
 事件类型：`touch`（action 1/2/3）、`key`、`sensor`、`pause`、`sensor-noise`。
 
-`storage_bytes` 限制内存存储。`allocation_fail_at` 让第 N 次宿主分配失败。`missing_features` 去掉对应能力位。
+`storage_bytes` 限制内存存储。`allocation_fail_at` 让第 N 次宿主分配失败。`missing_features` 去掉对应能力位，可用来验证可选功能如何降级。对 `requires` 声明的必需项，缺失会在启动时报告。
 
 诊断 JSON 包含应用 ID、Trap、内存、句柄和帧回调耗时。同一 Node、同一模拟器和同一场景下，状态哈希应一致。耗时字段会变化。

@@ -1,5 +1,7 @@
 # Python 系统模拟器
 
+源码使用的 APP 契约固定在 [sdk-compat.json](../src/sdk-compat.json)，Windows 便携包的契约见[发行说明](../release/NOTES.md)。调试有独立资源的游戏时，使用与该 AST 同一版的资源目录；从其他板复制的素材可能与本次构建的屏幕布局不同。
+
 从源码构建时，将 `aster-sim` 和 `aster-firmware` 放在同一父目录。便携包已包含桌面核心和运行依赖。
 
 此入口使用 PySide6 原生窗口，不启动网页服务器或 WebView。Launcher、卡片动画、手势、下拉设置、Wi-Fi 设置页、启动画面和首次开机进度页直接编译固件 C/LVGL 源码，通过 `aster_device`、`aster_os`、`aster_services` 端口接入桌面。APP 继续由已有 Node/WASM 运行时执行，独立进程异常或超时后可返回桌面。APP 文本读取虚拟 SD 卡上的 CPFONT v4，与设备使用相同字形、整数宽度和基线。
