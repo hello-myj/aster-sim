@@ -4,7 +4,7 @@
 
 ## 启动系统
 
-使用已发布的 Windows x64 SDK 时，`aster sim --profile osptek-p4 --app 项目目录` 会下载配套模拟器并打开已构建的项目。公开的 `sim-v1.0.0` 使用 ABI 4.3。要运行源码版，先按 [桌面构建说明](desktop/README.md) 准备原生核心和依赖，再从仓库运行：
+使用已发布的 Windows x64 SDK 时，`aster sim --profile osptek-p4 --app 项目目录` 会下载配套模拟器并打开已构建的项目。`sim-v1.1.0` 配套 SDK 4.5，支持 ABI 4.5。要运行源码版，先按 [桌面构建说明](desktop/README.md) 准备原生核心和依赖，再从仓库运行：
 
 ```powershell
 .\aster-desktop.cmd --profile osptek-p4

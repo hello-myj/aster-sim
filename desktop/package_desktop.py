@@ -55,7 +55,7 @@ def main():
                 (root / name).unlink(missing_ok=True)
     identity = {
         'schema': 1,
-        'version': '1.0.0',
+        'version': json.loads((ROOT / 'package.json').read_bytes())['version'],
         'abi': json.loads((ROOT / 'src/sdk-compat.json').read_bytes())['abi'],
         'commit': subprocess.check_output(
             ['git', '-C', str(ROOT), 'rev-parse', 'HEAD'], text=True
@@ -68,7 +68,7 @@ def main():
     )
     dest = ROOT / 'dist'
     dest.mkdir(exist_ok=True)
-    archive = dest / 'aster-sim-1.0.0-windows-x64.zip'
+    archive = dest / f"aster-sim-{identity['version']}-windows-x64.zip"
     with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED) as z:
         for p in sorted(directory.rglob('*')):
             if p.is_file():

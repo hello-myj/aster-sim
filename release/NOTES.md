@@ -1,7 +1,5 @@
-# Aster Desktop Simulator 1.0.0
+# Aster 桌面模拟器 1.1.0
 
-`sim-v1.0.0` 发行包对应 ABI 4.3，供配套 SDK 下载。源码主分支的 ABI 及构建步骤见[桌面说明](../desktop/README.md)。
+配套 SDK 4.5.0。桌面主机使用 ABI 4.5 加载 AST 中的 WASM，并按板型和必需能力检查应用。系统媒体播放器和经典蓝牙音频需要在支持的开发板上调试。
 
-Windows x64 原生桌面包，解压运行 aster-sim.exe。包含系统 Launcher、下拉设置、首次开机、APP 安装进度、P4/lckfb 配置和自定义分辨率。支持 PNG 截图、含音轨的 MP4 录屏，以及 --app/--resources 快速调试。
-
-运行包内 WASM，实机继续使用各自 CPU 的 AOT。
+Windows x64 下载并完整解压 ZIP，运行 `aster-sim.exe`。也可在 SDK 中执行 `aster sim --profile osptek-p4 --app my-app`，打开已编译的工程；立创实战派使用 `--profile lckfb-s3`。独立资源目录可通过 `--resources` 指定。工具栏可导出 PNG 或带内部音频的 MP4。
