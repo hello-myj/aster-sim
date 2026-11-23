@@ -1077,6 +1077,7 @@ class Host {
       try {
         this.call('aster_app_destroy');
       } finally {
+        this.capture = null;
         this.ws.stop();
         this.mqtt.stop();
         this.http.stop();

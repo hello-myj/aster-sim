@@ -239,6 +239,39 @@ test('ABI 3.10 compressed stream capability is explicitly unavailable', () => {
 });
 
 const { wavEffect, EffectVoice } = require('../src/audio-effects');
+test('continuous microphone uses its sample clock, drains and reports overflow', t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aster-capture-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const input = path.join(dir, 'input.pcm');
+  const sample = Buffer.from([1, 2, 3, 4, 5, 6, 7, 8]);
+  fs.writeFileSync(input, sample);
+  let ms = 0;
+  const h = new Host({ manifest: { id: 'test.capture' }, assets: new Map() },
+                     { pcmInput: input, clock: () => ms });
+  t.after(() => h.stop());
+  h.memory = new WebAssembly.Memory({ initial: 2 });
+  const a = h.imports();
+  const first = a.aster_audio_capture_open(32, 24);
+  assert.ok(first > 0);
+  assert.equal(h.u32(40), 44100);
+  assert.equal(a.aster_audio_capture_open(32, 24), -5);
+  assert.equal(a.aster_audio_capture_read(first, 128, 8), -15);
+  ms = 20;
+  assert.equal(a.aster_audio_capture_read(first, 128, 8), 8);
+  assert.deepEqual(h.bytes(128, 8), sample);
+  assert.equal(a.aster_audio_capture_finish(first), 0);
+  ms = 2000;
+  assert.equal(a.aster_audio_capture_read(first, 128, 4096), 3520);
+  assert.equal(a.aster_audio_capture_read(first, 128, 8), 0);
+  assert.equal(a.aster_audio_capture_close(first), 0);
+  const second = a.aster_audio_capture_open(32, 24);
+  assert.notEqual(first, second);
+  assert.equal(a.aster_audio_capture_read(first, 128, 8), -10);
+  ms += 1000;
+  assert.equal(a.aster_audio_capture_read(second, 128, 90000), 88200);
+  assert.equal(a.aster_audio_capture_read(second, 128, 8), -11);
+});
+
 function wav() {
   const b = Buffer.alloc(44 + 3200);
   b.write('RIFF');

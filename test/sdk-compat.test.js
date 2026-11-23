@@ -36,7 +36,7 @@ test('ABI 4.5 keeps optional player calls linkable without advertising a backend
   const { checkManifest } = require('../src/package');
   const manifest = { id: 'test.optional', abi: { min: '4.5.0' }, permissions: [] };
   checkManifest(manifest);
-  assert.throws(() => checkManifest({ ...manifest, abi: { min: '4.5.1' } }), /unsupported ABI/);
+  assert.throws(() => checkManifest({ ...manifest, abi: { min: '4.6.1' } }), /unsupported ABI/);
   assert.throws(() => checkManifest({ ...manifest, supported_boards: 'test' }), /supported_boards/);
   assert.throws(() => checkManifest({ ...manifest, requires: 'display' }), /Invalid requires/);
   assert.throws(() => checkManifest({ ...manifest, requires: Array(9).fill('touch') }), /Invalid requires/);

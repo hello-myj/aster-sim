@@ -62,7 +62,7 @@ test('ASTP truncation, malicious paths and ABI mismatch fail before instantiatio
   const bad = Buffer.from(original);
   const mo = bad.readUInt32LE(12),
     ml = bad.readUInt32LE(16);
-  const text = bad.toString('utf8', mo, mo + ml).replace('"4.0"', '"4.6"');
+  const text = bad.toString('utf8', mo, mo + ml).replace('"4.0"', '"9.0"');
   bad.write(text, mo);
   fs.writeFileSync(corrupt, bad);
   assert.throws(() => loadPackage(corrupt), /ABI/);

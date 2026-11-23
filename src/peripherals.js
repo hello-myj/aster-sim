@@ -82,6 +82,15 @@ module.exports = {
   },
   audioImports() {
     const enabled = () => this.features.has(6);
+    const availableBytes = cap => Math.floor((this.now() - cap.started) * 44100 / 1000) * 4;
+    const updateCapture = cap => {
+      if (cap.end !== null) return;
+      const produced = availableBytes(cap);
+      if (produced - cap.offset > 88200) {
+        cap.end = cap.offset + 88200;
+        cap.error = -11;
+      }
+    };
     const control = op => {
       if (!enabled()) return -16;
       const a = this.audio;
@@ -111,6 +120,45 @@ module.exports = {
       return 0;
     };
     return {
+      aster_audio_capture_open: (p, n) => {
+        if (!this.features.has(5)) return -16;
+        if (!p || n < 24 || !this.range(p, 24)) return -1;
+        if (this.capture || this.audio.state) return -5;
+        if (!this.pcmInput?.length || this.pcmInput.length % 4) return -7;
+        const handle = this.nextHandle++;
+        this.capture = { handle, started: this.now(), offset: 0, end: null, error: 0 };
+        [24, 1, 44100, 2, 16, 0].forEach((v, i) => this.u32(p + i * 4, v));
+        return handle;
+      },
+      aster_audio_capture_read: (handle, p, n) => {
+        const cap = this.capture;
+        if (!cap || cap.handle !== handle) return -10;
+        if (!p || n <= 0 || n % 4 || !this.range(p, n)) return -1;
+        updateCapture(cap);
+        const count = Math.min(n, (cap.end ?? availableBytes(cap)) - cap.offset);
+        if (!count) return cap.end === null ? -15 : cap.error;
+        const dest = this.bytes(p, count);
+        for (let done = 0; done < count;) {
+          const pos = cap.offset % this.pcmInput.length;
+          const chunk = Math.min(count - done, this.pcmInput.length - pos);
+          this.pcmInput.copy(dest, done, pos, pos + chunk);
+          cap.offset += chunk;
+          done += chunk;
+        }
+        return count;
+      },
+      aster_audio_capture_finish: handle => {
+        const cap = this.capture;
+        if (!cap || cap.handle !== handle) return -10;
+        updateCapture(cap);
+        cap.end ??= availableBytes(cap);
+        return 0;
+      },
+      aster_audio_capture_close: handle => {
+        if (!this.capture || this.capture.handle !== handle) return -10;
+        this.capture = null;
+        return 0;
+      },
       // Optional ABI 3.10 capability is absent: no fake whole-file streaming.
       aster_audio_stream_open: () => -16,
       aster_audio_stream_write: () => -16,
@@ -133,6 +181,7 @@ module.exports = {
       aster_audio_get_volume: () => (enabled() ? this.volume : -16),
       aster_audio_start_file: (p, n) => {
         if (!enabled()) return -16;
+        if (this.capture) return -5;
         const data = this.readVirtual(p, n),
           info = wavInfo(data);
         if (!info.wav && !(data[0] === 0xff || data.toString('ascii', 0, 3) === 'ID3')) return -3;
@@ -263,6 +312,7 @@ module.exports = {
         return 0;
       },
       aster_audio_record: (p, n) => {
+        if (this.capture) return -5;
         if (!this.pcmInput) return -16;
         if (n > this.pcmInput.length) return -11;
         this.bytes(p, n).set(this.pcmInput.subarray(0, n));
