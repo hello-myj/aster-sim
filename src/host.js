@@ -32,6 +32,12 @@ const E = {
   AGAIN: -15,
   DEVICE: -16
 };
+function storeReleaseNumber(version) {
+  if (typeof version !== 'string' || !/^\d+\.\d+(?:\.\d+)?$/.test(version)) return -1;
+  const [major, minor, patch = 0] = version.split('.').map(Number);
+  return Math.max(major, minor, patch) <= 255 ? major * 65536 + minor * 256 + patch : -1;
+}
+
 function declaredMax(manifest) {
   const max = Number(manifest.memory?.max);
   return Number.isFinite(max) && max > 0 ? max : 0x100000000;
@@ -785,8 +791,15 @@ class Host {
         'download.ast',
         this.options
       );
-      if (installed.manifest.id === this.manifest.id)
+      const storeUpdate = path.basename(request.program) === 'store-update.ast';
+      if (storeUpdate || installed.manifest.id === 'aster.store') {
+        const current = storeReleaseNumber(this.manifest.version);
+        if (!storeUpdate || this.manifest.id !== 'aster.store' || installed.manifest.id !== 'aster.store' ||
+            current < 0 || storeReleaseNumber(installed.manifest.version) <= current)
+          throw Object.assign(Error('Invalid Store update'), { code: 'EPERM' });
+      } else if (installed.manifest.id === this.manifest.id) {
         throw Object.assign(Error('Self update denied'), { code: 'EPERM' });
+      }
       let count = 0,
         total = 0;
       const collect = (base, prefix = '', depth = 0) => {
