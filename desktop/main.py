@@ -46,11 +46,12 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QSplitter,
+    QStackedWidget,
     QFrame,
     QInputDialog,
 )
 from bootstrap import Bootstrap
-from recording import AudioTracks
+from recording import AudioTracks, voice_pcm_for_recording
 from install_dialog import InstallDialog
 
 ROOT = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parents[1]))
@@ -61,6 +62,8 @@ FIRMWARE_ROOT = (
 )
 CONFIG_DIR = FIRMWARE_ROOT / 'config'
 STATE_ROOT = Path(sys.executable).parent if getattr(sys, 'frozen', False) else ROOT
+AVATAR_APP = {'id': 'aster.sim.whale', 'name': '小鲸助手', 'description': '与小鲸进行语音对话。',
+              'version': '', 'category': 'utility'}
 
 
 def distribution():
@@ -224,6 +227,10 @@ class Window(QMainWindow):
         self.profile_key = args.profile
         self.profile = PROFILES[self.profile_key]
         self.state_base = Path(args.state).resolve()
+        self.avatar_config = self.read_avatar_config(args)
+        self.avatar = None
+        self.avatar_server = None
+        self.avatar_page = None
         self.native_buffer = bytearray()
         self.bridge_buffer = bytearray()
         self.catalog = []
@@ -278,6 +285,8 @@ class Window(QMainWindow):
         self.music.mediaStatusChanged.connect(self.music_status)
         self.screen = Screen()
         self.screen.touched.connect(self.touch)
+        self.screen_stack = QStackedWidget()
+        self.screen_stack.addWidget(self.screen)
         self.logs = QPlainTextEdit()
         self.logs.setReadOnly(True)
         self.logs.document().setMaximumBlockCount(500)
@@ -324,7 +333,7 @@ class Window(QMainWindow):
         top = QWidget()
         top.setLayout(toolbar)
         splitter = QSplitter(Qt.Orientation.Vertical)
-        splitter.addWidget(self.screen)
+        splitter.addWidget(self.screen_stack)
         splitter.addWidget(self.logs)
         splitter.setStretchFactor(0, 1)
         central = QWidget()
@@ -384,6 +393,34 @@ class Window(QMainWindow):
     def error(self, message):
         self.log(message)
         self.status.setText(message)
+
+    def read_avatar_config(self, args):
+        settings = self.state_base / 'avatar.json'
+        model = getattr(args, 'ai_avatar', None)
+        if model:
+            self.state_base.mkdir(parents=True, exist_ok=True)
+            key_file = getattr(args, 'key_file', None)
+            config = {'model': str(model.resolve()),
+                      'key_file': str(key_file.resolve()) if key_file else '',
+                      'idle_autonomy': getattr(args, 'idle_autonomy', False)}
+            settings.write_text(json.dumps(config, ensure_ascii=False), encoding='utf-8')
+            return config
+        try:
+            config = json.loads(settings.read_text(encoding='utf-8'))
+        except (OSError, ValueError):
+            return None
+        return config if isinstance(config, dict) and isinstance(config.get('model'), str) else None
+
+    def save_avatar_ai_options(self, **options):
+        config = {**self.avatar_config, **options}
+        settings = self.state_base / 'avatar.json'
+        temporary = settings.with_suffix('.tmp')
+        temporary.write_text(json.dumps(config, ensure_ascii=False), encoding='utf-8')
+        temporary.replace(settings)
+        self.avatar_config = config
+
+    def avatar_active(self):
+        return self.active is not None and self.active['id'] == AVATAR_APP['id']
         if not self.args.smoke:
             QMessageBox.warning(self, 'Aster', message)
 
@@ -502,7 +539,8 @@ class Window(QMainWindow):
             return str(value).replace('\t', ' ').replace('\n', ' ').replace('\r', ' ')
 
         self.native_command('C')
-        for app in self.catalog:
+        catalog = [AVATAR_APP, *self.catalog] if self.avatar_config else self.catalog
+        for app in catalog:
             self.native_command(
                 'A\t'
                 + '\t'.join(
@@ -589,7 +627,10 @@ class Window(QMainWindow):
                 if action == 'launch':
                     self.start_app(value)
                 elif action == 'uninstall':
-                    self.send_bridge({'type': 'uninstall', 'id': value})
+                    if self.avatar_config and value == AVATAR_APP['id']:
+                        self.error('小鲸助手由系统模拟器提供。')
+                    else:
+                        self.send_bridge({'type': 'uninstall', 'id': value})
                 elif action == 'home':
                     self.go_home()
                 elif action == 'touch':
@@ -662,6 +703,9 @@ class Window(QMainWindow):
                     ),
                 )
         elif kind == 'ready':
+            if self.avatar_active():
+                self.send_bridge({'type': 'home'})
+                return
             self.active = message['manifest']
             self.overlay = False
             size = (message['width'], message['height'])
@@ -673,6 +717,8 @@ class Window(QMainWindow):
                 f"{self.active.get('name')} · {size[0]} × {size[1]} · WASM 桌面执行"
             )
         elif kind == 'frame':
+            if self.avatar_active():
+                return
             image = QImage.fromData(base64.b64decode(message['data']), 'PNG')
             if not image.isNull() and self.active:
                 if not self.overlay:
@@ -687,6 +733,8 @@ class Window(QMainWindow):
                     )
                     self.core.write(f'B {len(raw)}\n'.encode() + raw)
         elif kind == 'home':
+            if self.avatar_active():
+                return
             if self.active:
                 self.active = None
                 self.overlay = False
@@ -863,10 +911,65 @@ class Window(QMainWindow):
     def start_app(self, id):
         if self.active:
             return
+        if self.avatar_config and id == AVATAR_APP['id']:
+            self.open_avatar()
+            return
         self.send_bridge({'type': 'start', 'id': id})
+
+    def open_avatar(self):
+        if self.avatar is None:
+            from threading import Thread
+
+            from avatar_desktop import AvatarWindow, SceneServer
+            from avatar_voice import DeepSeek
+
+            config = self.avatar_config
+            key_file = config.get('key_file')
+            server = None
+            try:
+                key = Path(key_file).read_text(encoding='utf-8-sig').strip() if key_file else os.getenv('DEEPSEEK_API_KEY')
+                api = DeepSeek(key)
+                server = SceneServer(Path(config['model']))
+                page = QWidget()
+                layout = QVBoxLayout(page)
+                layout.setContentsMargins(0, 0, 0, 0)
+                avatar = AvatarWindow(server, api, config.get('idle_autonomy', False), parent=page,
+                                      ai_enabled=config.get('ai_enabled', True),
+                                      save_ai_options=self.save_avatar_ai_options)
+            except (OSError, ValueError) as error:
+                if server is not None:
+                    server.server_close()
+                self.error(f'小鲸助手无法打开（{error}）')
+                return
+            Thread(target=server.serve_forever, daemon=True).start()
+            layout.addWidget(avatar, 0, Qt.AlignmentFlag.AlignCenter)
+            self.screen_stack.addWidget(page)
+            avatar.audio_written.connect(self.capture_avatar_audio)
+            self.avatar, self.avatar_page, self.avatar_server = avatar, page, server
+        self.screen.release_all()
+        self.active = AVATAR_APP
+        self.overlay = False
+        self.native_command('H')
+        self.avatar.setFixedSize(*(value * self.screen.zoom for value in self.native_size))
+        self.screen_stack.setCurrentWidget(self.avatar_page)
+        self.statusBar().hide()
+
+    def capture_avatar_audio(self, pcm, at):
+        if self.avatar_active() and self.record_audio:
+            self.record_audio.add('music', voice_pcm_for_recording(pcm), at=at)
 
     def go_home(self):
         self.screen.release_all()
+        if self.avatar_active():
+            self.screen_stack.setCurrentWidget(self.screen)
+            self.avatar.stop_turn()
+            self.avatar.stop_capture()
+            self.avatar.capture_data.clear()
+            self.active = None
+            self.native_command('R')
+            self.statusBar().show()
+            self.status.setText(f"{self.profile['label']} · 系统桌面 · {len(self.catalog)} 个应用")
+            return
         self.send_bridge({'type': 'home'})
 
     def touch(self, action, x, y, slot):
@@ -899,6 +1002,8 @@ class Window(QMainWindow):
         if self.bootstrap and self.bootstrap.thread and self.bootstrap.thread.is_alive():
             self.error('请等待系统资源下载完成后再切换设备。')
             return
+        if self.avatar_active():
+            self.go_home()
         self.screen.release_all()
         self.profile_key = self.device.currentData()
         self.profile = PROFILES[self.profile_key]
@@ -911,6 +1016,8 @@ class Window(QMainWindow):
 
     def change_zoom(self, index):
         self.screen.zoom = index + 1
+        if self.avatar_active():
+            self.avatar.setFixedSize(*(value * self.screen.zoom for value in self.native_size))
         self.screen.updateGeometry()
         self.screen.update()
         self.resize(
@@ -966,11 +1073,19 @@ class Window(QMainWindow):
         else:
             self.start_app(id)
 
+    def capture_frame(self):
+        if self.avatar_active():
+            image = self.avatar.scene.grab().toImage()
+            return image.scaled(QSize(*self.native_size), Qt.AspectRatioMode.IgnoreAspectRatio,
+                                Qt.TransformationMode.SmoothTransformation)
+        return self.screen.image
+
     def save_screenshot(self, path):
-        if self.screen.image.isNull():
+        image = self.capture_frame()
+        if image.isNull():
             return False
         Path(path).parent.mkdir(parents=True, exist_ok=True)
-        return self.screen.image.save(str(path), 'PNG')
+        return image.save(str(path), 'PNG')
 
     def screenshot_dialog(self):
         file, _ = QFileDialog.getSaveFileName(
@@ -992,7 +1107,7 @@ class Window(QMainWindow):
     def start_recording(self, file):
         if self.encoder or self.muxer:
             return
-        image = self.screen.image
+        image = self.capture_frame()
         if image.isNull():
             return
         if image.width() % 2 or image.height() % 2:
@@ -1089,7 +1204,7 @@ class Window(QMainWindow):
         if self.encoder.state() != QProcess.ProcessState.Running:
             self.stop_recording()
             return
-        image = self.screen.image
+        image = self.capture_frame()
         if image.size() != self.record_size:
             self.stop_recording()
             self.error('屏幕方向变化，已结束本段录制。')
@@ -1211,6 +1326,10 @@ class Window(QMainWindow):
     def closeEvent(self, event: QCloseEvent):
         self.closing = True
         self.timer.stop()
+        if self.avatar:
+            self.avatar.close()
+            self.avatar_server.shutdown()
+            self.avatar_server.server_close()
         self.screen.release_all()
         self.stop_recording()
         self.send_bridge({'type': 'quit'})
@@ -1245,6 +1364,12 @@ def parse_args(argv=None):
     parser.add_argument('--height', type=int)
     parser.add_argument('--state', default=str(STATE_ROOT / 'state/desktop'))
     parser.add_argument('--title')
+    parser.add_argument('--ai-avatar', type=Path, metavar='MODEL_DIR',
+                        help='Configure the Live2D companion in the system simulator')
+    parser.add_argument('--key-file', type=Path, metavar='PATH',
+                        help='Read the DeepSeek key from this file in avatar mode')
+    parser.add_argument('--idle-autonomy', action='store_true',
+                        help='Enable occasional DeepSeek-selected actions while the avatar is idle')
     parser.add_argument('--wsl', default='Ubuntu-22.04')
     parser.add_argument('--smoke', action='store_true')
     parser.add_argument(
@@ -1259,6 +1384,10 @@ def parse_args(argv=None):
         '--resources', help='External resource root (defaults to resources beside the package)'
     )
     args = parser.parse_args(argv)
+    if args.key_file and not args.ai_avatar:
+        parser.error('--key-file 需要同时指定 --ai-avatar')
+    if args.idle_autonomy and not args.ai_avatar:
+        parser.error('--idle-autonomy 需要同时指定 --ai-avatar')
     for dimension in (args.width, args.height):
         if dimension is not None and not 240 <= dimension <= 1280:
             parser.error('尺寸范围为 240..1280')

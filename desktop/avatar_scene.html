@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Aster 角色</title>
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #1f3340; color: #eef3f5; font: 14px 'Microsoft YaHei UI', sans-serif; }
+    #talk-area { position: absolute; inset: 0 0 auto; z-index: 3; padding: 7px 10px;
+      display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: start; pointer-events: none; }
+    #avatar-stage { position: absolute; inset: 0; overflow: hidden; }
+    canvas { display: block; position: absolute; inset: 0; touch-action: none; user-select: none; }
+    [hidden] { display: none !important; }
+    #loading, #zoom-control { position: absolute; z-index: 2; }
+    #loading { top: 44%; width: 100%; text-align: center; pointer-events: none; }
+    #voice-controls { position: relative; display: flex; gap: 6px; justify-self: end; grid-column: 2; pointer-events: auto; }
+    button, summary { font: inherit; color: #edf4f6; background: #162938de; border: 1px solid #b0c6d274; border-radius: 9px; padding: 7px 9px; cursor: pointer; }
+    button:disabled { opacity: .42; cursor: default; }
+    #record[aria-pressed="true"] { background: #87434bdd; }
+    #settings summary { list-style: none; }
+    #settings-panel { position: absolute; right: 0; top: 37px; display: grid; gap: 7px; padding: 9px; background: #162938f4; border: 1px solid #b0c6d274; border-radius: 10px; min-width: 6em; }
+    #settings-panel button { padding: 5px 7px; }
+    #settings-panel button[aria-pressed="true"] { border-color: #8ad1e5; }
+    #ai-settings-page { position: absolute; inset: 0; z-index: 4; box-sizing: border-box;
+      background: #1f3340; padding: clamp(12px, 4vw, 24px); overflow-y: auto; }
+    #ai-settings-page header, .ai-settings-row { display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 8px; }
+    #ai-settings-page h1 { margin: 0; font-size: clamp(19px, 5vw, 25px); }
+    .ai-settings-row { border-bottom: 1px solid #a9c4d330; padding: 16px 0; }
+    #ai-settings-page p { color: #d4e4eb; overflow-wrap: anywhere; }
+    #notice { align-self: center; max-height: 2.6em; overflow: auto; overflow-wrap: anywhere;
+      color: #e5eff3; font-size: 12px; line-height: 1.3; text-shadow: 0 1px 4px #142632; pointer-events: auto; }
+    #zoom-control { left: 4px; top: 18%; bottom: 24%; display: grid; justify-items: center; grid-template-rows: 1fr auto; width: 32px; opacity: .48; }
+    #zoom-control:hover, #zoom-control:focus-within { opacity: .64; }
+    #zoom { writing-mode: vertical-lr; direction: rtl; height: 100%; width: 20px; margin: 0; accent-color: #b7e2ed; cursor: ns-resize; }
+    #zoom-label { margin-top: 5px; font-size: 11px; text-shadow: 0 1px 3px #142632; }
+    #caption-area { position: absolute; inset: auto 0 0; z-index: 2;
+      box-sizing: border-box; display: flex; align-items: flex-end; padding: 3px 10px 6px; pointer-events: none; }
+    #caption { width: 100%; max-height: calc(2.8em + 10px); box-sizing: border-box; overflow-y: auto; overscroll-behavior: contain;
+      padding: 5px 10px; border-radius: 9px; background: #101e2ed9; color: #e8f3f4;
+      font-size: clamp(13px, 3.35vw, 17px); line-height: 1.4; text-align: center; white-space: pre-wrap;
+      overflow-wrap: anywhere; pointer-events: auto; }
+  </style>
+  <script defer src="/webchannel.js"></script>
+  <script defer src="/source/deps/purism-preview-core.js"></script>
+  <script defer src="/source/deps/pixi.min.js"></script>
+  <script defer src="/source/deps/live2d-pixi.min.js"></script>
+  <script defer src="/scene.js"></script>
+</head>
+<body>
+  <header id="talk-area">
+    <div id="notice" role="status" hidden></div>
+    <div id="voice-controls" hidden>
+      <button id="record" type="button">开始说话</button><button id="stop" type="button" hidden>停止</button>
+      <button id="retry" type="button" hidden>重试</button>
+      <details id="settings"><summary>设置</summary><div id="settings-panel">
+        <button id="original" type="button">原图</button>
+        <button id="autonomous" type="button">自主动作</button>
+        <button id="idle" type="button">待机自主</button>
+        <button id="reset" type="button">恢复姿势</button>
+        <button id="ai-settings" type="button">AI 设置</button>
+      </div></details>
+    </div>
+  </header>
+  <main id="avatar-stage">
+    <p id="loading">正在打开角色页面…</p>
+    <div id="zoom-control"><input id="zoom" type="range" min="60" max="560" value="160" aria-label="角色缩放">
+      <output id="zoom-label" for="zoom">160%</output></div>
+  </main>
+  <footer id="caption-area"><div id="caption" aria-live="polite" hidden></div></footer>
+  <section id="ai-settings-page" aria-labelledby="ai-settings-title" hidden>
+    <header><h1 id="ai-settings-title">AI 设置</h1><button id="ai-back" type="button">返回</button></header>
+    <div class="ai-settings-row"><span>AI 对话</span><button id="ai-toggle" type="button"></button></div>
+    <div class="ai-settings-row"><span>DeepSeek API Key</span><button id="ai-key" type="button">选择文件</button></div>
+    <p id="ai-setting-notice" role="status" hidden></p>
+  </section>
+</body>
+</html>

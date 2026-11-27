@@ -40,6 +40,8 @@ def main():
         (ROOT / 'build/desktop-windows/aster-desktop-core.exe', 'build/desktop-windows'),
         (firmware / 'resources/fonts', 'resources/firmware/resources/fonts'),
         (firmware / 'config', 'resources/firmware/config'),
+        (ROOT / 'desktop/avatar_scene.html', '.'),
+        (ROOT / 'desktop/avatar_scene.js', '.'),
     ]:
         command += ['--add-data', str(source) + ';' + destination]
     command += ['--add-data', str(ffmpeg) + ';.tools/desktop']

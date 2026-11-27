@@ -9,6 +9,13 @@ RATE = 48000
 FRAME_BYTES = 4  # S16LE, stereo
 
 
+def voice_pcm_for_recording(pcm):
+    """Expand 24 kHz mono speaker samples to the 48 kHz stereo track format."""
+    samples = array('h', pcm)
+    # Repeating each encoded sample preserves its byte order on either host.
+    return array('h', (value for value in samples for _ in range(4))).tobytes()
+
+
 class AudioTracks:
     def __init__(self, directory, started):
         self.started = started
